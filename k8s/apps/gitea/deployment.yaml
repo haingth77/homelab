@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitea
+  namespace: gitea-system
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: gitea
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+      app.kubernetes.io/instance: gitea
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gitea
+        app.kubernetes.io/instance: gitea
+    spec:
+      containers:
+        - name: gitea
+          image: gitea/gitea:latest # Use a specific version in production (e.g., 1.21.11)
+          env:
+            - name: GITEA__database__DB_TYPE
+              value: postgres
+            - name: GITEA__database__HOST
+              value: postgresql:5432 # Service name and port for PostgreSQL
+            - name: GITEA__database__NAME
+              value: gitea
+            - name: GITEA__database__USER
+              value: gitea
+            - name: GITEA__database__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: GITEA_DB_PASSWORD
+            - name: GITEA__database__SSL_MODE
+              value: disable
+            - name: GITEA__server__ROOT_URL
+              value: http://gitea.gitea-system.svc.cluster.local:3000/ # Internal URL
+            - name: GITEA__server__SSH_DOMAIN
+              value: localhost # Adjust if exposing SSH
+            - name: GITEA__server__SSH_PORT
+              value: "22"
+            - name: GITEA__server__HTTP_PORT
+              value: "3000"
+            - name: GITEA__server__LFS_START_SERVER
+              value: "true"
+            - name: GITEA__security__INSTALL_LOCK
+              value: "true" # Prevent re-installation via web UI
+            # Add other necessary Gitea configurations here, often via ConfigMap
+          ports:
+            - name: http
+              containerPort: 3000
+            - name: ssh
+              containerPort: 22
+          volumeMounts:
+            - name: gitea-data
+              mountPath: /data
+            - name: gitea-config
+              mountPath: /etc/gitea
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: gitea-data
+          persistentVolumeClaim:
+            claimName: gitea-data
+        - name: gitea-config
+          configMap:
+            name: gitea-config

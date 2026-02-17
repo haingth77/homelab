@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/holdennguyen
+    targetRevision: HEAD
+    path: k8s/apps/gitea
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false # Namespace is created by the PostgreSQL application

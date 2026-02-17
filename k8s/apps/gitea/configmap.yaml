@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-config
+  namespace: gitea-system
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: gitea
+data:
+  app.ini: |
+    APP_NAME = Gitea: Git with a cup of tea
+    RUN_MODE = prod
+    
+    [database]
+    DB_TYPE = postgres
+    HOST = postgresql:5432
+    USER = gitea
+    PASSWORD = "$(GITEA_DB_PASSWORD)"
+    NAME = gitea
+    SCHEMA = public
+    SSL_MODE = disable
+    
+    [server]
+    HTTP_ADDR = 0.0.0.0
+    HTTP_PORT = 3000
+    ROOT_URL = https://gitea.homelab.local/
+    DISABLE_SSH = false
+    START_SSH_SERVER = true
+    SSH_DOMAIN = gitea.homelab.local
+    SSH_PORT = 22
+    LFS_START_SERVER = true
+    
+    [repository]
+    ROOT = /data/git/repositories
+    
+    [security]
+    INSTALL_LOCK = true
+    SECRET_KEY = "$(GITEA_SECRET_KEY)" # Placeholder: should be generated and put in a Secret
+    
+    [session]
+    PROVIDER = File
+    PROVIDER_CONFIG = /data/gitea/sessions
+    
+    [log]
+    MODE = console
+    LEVEL = info
+    
+    [queue]
+    TYPE = channel
