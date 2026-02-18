@@ -27,14 +27,12 @@ spec:
           enabled: false
         postgresql:
           enabled: true
-          fullnameOverride: infisical-postgresql
           auth:
             username: infisical
             password: a54570cfc9e6a6c91750046b
             database: infisicalDB
         redis:
           enabled: true
-          fullnameOverride: infisical-redis
           architecture: standalone
           auth:
             password: "58484c16d50c7939206f4875"
