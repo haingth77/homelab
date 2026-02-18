@@ -33,6 +33,7 @@ markdown_extensions:
   - pymdownx.details
 
 nav:
+  - Home: index.md
   - Architecture: architecture.md
   - Networking: networking.md
   - Bootstrap: bootstrap.md
