@@ -250,17 +250,55 @@ flowchart LR
 
 ## Updating OpenClaw
 
-When the openclaw source code changes:
+The `openclaw/` directory is a **git submodule** pointing to `github.com/OpenClaw/OpenClaw`. The homelab repo pins a specific commit; openclaw's internal files are not tracked by the homelab repo.
+
+### Pull the latest upstream release
 
 ```bash
-# 1. Rebuild the Docker image
+# 1. Fetch and update the submodule to the latest upstream commit
+cd openclaw
+git fetch origin
+git checkout main
+git pull origin main
+cd ..
+
+# 2. Record the new commit in the homelab repo
+git add openclaw
+git commit -m "update openclaw submodule to $(cd openclaw && git log -1 --format='%h — %s')"
+git push origin main
+
+# 3. Rebuild the Docker image with the new source
 ./scripts/build-openclaw.sh
 
-# 2. Restart the deployment to pick up the new image
+# 4. Restart the deployment to pick up the new image
 kubectl rollout restart deployment/openclaw -n openclaw
 
-# 3. Watch the rollout
+# 5. Watch the rollout
 kubectl rollout status deployment/openclaw -n openclaw
+```
+
+### Pin to a specific version
+
+```bash
+cd openclaw
+git fetch origin --tags
+git checkout v2026.2.16    # or any tag/commit
+cd ..
+git add openclaw
+git commit -m "pin openclaw submodule to v2026.2.16"
+git push origin main
+./scripts/build-openclaw.sh
+kubectl rollout restart deployment/openclaw -n openclaw
+```
+
+### Clone the homelab repo (fresh machine)
+
+When cloning the homelab repo on a new machine, the submodule directory will be empty by default. Initialize it with:
+
+```bash
+git clone git@github.com:holdennguyen/homelab.git
+cd homelab
+git submodule update --init
 ```
 
 ## Manifest Reference

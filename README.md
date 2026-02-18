@@ -100,7 +100,7 @@ homelab/
 │       ├── kubernetes-dashboard/  # Cluster monitoring dashboard
 │       ├── openclaw/              # OpenClaw AI gateway (locally built image)
 │       └── postgresql/            # PostgreSQL manifests (ExternalSecret, no plain Secrets)
-├── openclaw/                      # OpenClaw source code (AI agent framework)
+├── openclaw/                      # OpenClaw source (git submodule → github.com/OpenClaw/OpenClaw)
 ├── scripts/                       # Helper scripts (image builds, etc.)
 └── skills/                        # Shared agent skill modules
 ```

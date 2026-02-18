@@ -45,15 +45,19 @@ flowchart TD
 
 The deployment uses a locally built Docker image (`openclaw:latest`) with `imagePullPolicy: Never`. OrbStack's Kubernetes cluster shares the host Docker daemon, so locally built images are immediately available.
 
+The `openclaw/` directory at the repo root is a **git submodule** pointing to `github.com/OpenClaw/OpenClaw`. See [docs/openclaw.md](../../../docs/openclaw.md#updating-openclaw) for the full update workflow (pull upstream, rebuild, restart).
+
 Build the image:
 
 ```bash
 ./scripts/build-openclaw.sh
 ```
 
-After updating the openclaw source, rebuild and restart:
+After updating the openclaw submodule, rebuild and restart:
 
 ```bash
+cd openclaw && git pull origin main && cd ..
+git add openclaw && git commit -m "update openclaw submodule"
 ./scripts/build-openclaw.sh
 kubectl rollout restart deployment/openclaw -n openclaw
 ```
