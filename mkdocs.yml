@@ -38,3 +38,10 @@ nav:
   - Networking: networking.md
   - Bootstrap: bootstrap.md
   - Secret Management: secret-management.md
+  - Apps:
+      - ArgoCD: argocd.md
+      - Gitea: gitea.md
+      - PostgreSQL: postgresql.md
+      - External Secrets: external-secrets.md
+      - Infisical: infisical.md
+      - Kubernetes Dashboard: kubernetes-dashboard.md
