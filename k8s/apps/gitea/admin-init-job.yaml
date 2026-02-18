@@ -80,9 +80,15 @@ spec:
               P=$(printf '%s' "${GITEA_ADMIN_PASSWORD}" | base64 | tr -d '\n')
               E=$(printf '%s' "${GITEA_ADMIN_EMAIL}"    | base64 | tr -d '\n')
 
+              # Resolve the pod name by label (avoids needing 'get deployments' RBAC).
+              GITEA_POD=$(kubectl get pods -n gitea-system \
+                -l app.kubernetes.io/name=gitea \
+                -o jsonpath='{.items[0].metadata.name}')
+              echo "Target pod: ${GITEA_POD}"
+
               # Wait until the Gitea pod is ready to accept CLI commands.
               echo "Waiting for Gitea to be ready..."
-              until kubectl exec -n gitea-system deploy/gitea -- \
+              until kubectl exec -n gitea-system "${GITEA_POD}" -- \
                   su git -s /bin/sh -c 'gitea admin user list' > /dev/null 2>&1; do
                 sleep 5
               done
@@ -91,7 +97,7 @@ spec:
               # Pipe a shell script into the running Gitea pod as the git user.
               # Credentials are base64-decoded inside the pod, never exposed as
               # plain-text process arguments or files.
-              cat <<EOF | kubectl exec -i -n gitea-system deploy/gitea -- su git -s /bin/sh
+              cat <<EOF | kubectl exec -i -n gitea-system "${GITEA_POD}" -- su git -s /bin/sh
               UNAME=\$(printf '%s' '${U}' | base64 -d)
               PWD=\$(printf '%s' '${P}' | base64 -d)
               EMAIL=\$(printf '%s' '${E}' | base64 -d)
