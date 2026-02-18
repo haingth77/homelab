@@ -154,9 +154,10 @@ kubectl exec -n gitea-system deploy/postgresql -- \
 
 Each service has detailed documentation covering its configuration, integration points, and operational notes:
 
+- [Networking](docs/networking.md) -- Tailscale Serve + NodePort architecture, request path, TLS, port map, troubleshooting
 - [Argo CD](k8s/apps/argocd/README.md) -- GitOps controller, Application definitions, sync policies
 - [PostgreSQL](k8s/apps/postgresql/README.md) -- Database configuration, pg_hba.conf, PGDATA layout, Secret management
-- [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, Tailscale networking
+- [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, service configuration
 
 ## Future Plans
 
