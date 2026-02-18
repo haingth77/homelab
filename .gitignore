@@ -5,6 +5,7 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/*.tfplan
 terraform/.argocd-root-app.yaml
+terraform/.infisical-app.yaml
 
 # OS
 .DS_Store
