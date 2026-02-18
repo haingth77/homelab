@@ -1,54 +1,58 @@
+---
+# Minimal RBAC so the Job can exec into the running Gitea pod.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitea-admin-init
+  namespace: gitea-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitea-admin-init
+  namespace: gitea-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitea-admin-init
+  namespace: gitea-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gitea-admin-init
+subjects:
+  - kind: ServiceAccount
+    name: gitea-admin-init
+    namespace: gitea-system
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: gitea-admin-init
   namespace: gitea-system
   annotations:
-    # Run after every ArgoCD sync. The BeforeHookCreation policy deletes any
-    # previous run of this Job before creating a new one, so it stays idempotent.
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
-  # Retry up to 3 times in case Gitea is still running migrations on the first attempt.
   backoffLimit: 3
   template:
     spec:
       restartPolicy: OnFailure
-      # gitea/gitea refuses to run as root (UID 0). fsGroup ensures the emptyDir
-      # work volume is writable by GID 1000 even though the initContainer runs as root.
-      securityContext:
-        fsGroup: 1000
-      initContainers:
-        # Copy app.ini from the ConfigMap into an emptyDir so the gitea CLI can
-        # find it at $GITEA_WORK_DIR/conf/app.ini (ConfigMap mounts are read-only).
-        - name: copy-config
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - mkdir -p /work/conf && cp /etc/gitea/app.ini /work/conf/app.ini
-          volumeMounts:
-            - name: gitea-config
-              mountPath: /etc/gitea
-              readOnly: true
-            - name: work-dir
-              mountPath: /work
-
+      serviceAccountName: gitea-admin-init
       containers:
         - name: create-admin
-          image: gitea/gitea:1.22
-          securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
+          # bitnami/kubectl provides kubectl, sh, and base64 without needing
+          # Gitea's config file — we exec into the running pod as the git user.
+          image: bitnami/kubectl:latest
           env:
-            - name: GITEA_WORK_DIR
-              value: /work
-            # Override the DB password the same way the main Deployment does.
-            - name: GITEA__database__PASSWD
-              valueFrom:
-                secretKeyRef:
-                  name: postgresql-secret
-                  key: GITEA_DB_PASSWORD
             - name: GITEA_ADMIN_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -70,30 +74,38 @@ spec:
             - |
               set -e
 
-              # If the user already exists, just ensure the password is current.
-              if gitea admin user list 2>/dev/null | grep -q "${GITEA_ADMIN_USERNAME}"; then
-                echo "User '${GITEA_ADMIN_USERNAME}' already exists — updating password."
-                gitea admin user change-password \
-                  --username "${GITEA_ADMIN_USERNAME}" \
-                  --password "${GITEA_ADMIN_PASSWORD}"
+              # Base64-encode credentials so they pass cleanly through the heredoc
+              # with no special-character escaping issues inside the target pod.
+              U=$(printf '%s' "${GITEA_ADMIN_USERNAME}" | base64 | tr -d '\n')
+              P=$(printf '%s' "${GITEA_ADMIN_PASSWORD}" | base64 | tr -d '\n')
+              E=$(printf '%s' "${GITEA_ADMIN_EMAIL}"    | base64 | tr -d '\n')
+
+              # Wait until the Gitea pod is ready to accept CLI commands.
+              echo "Waiting for Gitea to be ready..."
+              until kubectl exec -n gitea-system deploy/gitea -- \
+                  su git -s /bin/sh -c 'gitea admin user list' > /dev/null 2>&1; do
+                sleep 5
+              done
+              echo "Gitea is ready."
+
+              # Pipe a shell script into the running Gitea pod as the git user.
+              # Credentials are base64-decoded inside the pod, never exposed as
+              # plain-text process arguments or files.
+              cat <<EOF | kubectl exec -i -n gitea-system deploy/gitea -- su git -s /bin/sh
+              UNAME=\$(printf '%s' '${U}' | base64 -d)
+              PWD=\$(printf '%s' '${P}' | base64 -d)
+              EMAIL=\$(printf '%s' '${E}' | base64 -d)
+              if gitea admin user list 2>/dev/null | grep -q "\$UNAME"; then
+                echo "User '\$UNAME' already exists — updating password."
+                gitea admin user change-password --username "\$UNAME" --password "\$PWD"
                 echo "Password updated."
               else
-                echo "Creating admin user '${GITEA_ADMIN_USERNAME}'."
-                gitea admin user create \
-                  --admin \
-                  --username "${GITEA_ADMIN_USERNAME}" \
-                  --password "${GITEA_ADMIN_PASSWORD}" \
-                  --email    "${GITEA_ADMIN_EMAIL}" \
+                echo "Creating admin '\$UNAME'."
+                gitea admin user create --admin \
+                  --username "\$UNAME" \
+                  --password "\$PWD" \
+                  --email    "\$EMAIL" \
                   --must-change-password=false
                 echo "Admin user created."
               fi
-          volumeMounts:
-            - name: work-dir
-              mountPath: /work
-
-      volumes:
-        - name: gitea-config
-          configMap:
-            name: gitea-config
-        - name: work-dir
-          emptyDir: {}
+              EOF
