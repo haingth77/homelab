@@ -43,16 +43,30 @@ flowchart TD
 
 ## Kustomization
 
-`kustomization.yaml` uses a remote resource to fetch the official Argo CD manifests:
+`kustomization.yaml` uses a remote resource to fetch the official Argo CD manifests and includes a patch to expose the server via NodePort:
 
 ```yaml
 resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
+patches:
+  - target:
+      kind: Service
+      name: argocd-server
+    patch: |
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+      - op: add
+        path: /spec/ports/1/nodePort
+        value: 30443
 ```
 
-This deploys the full Argo CD stack (server, application-controller, repo-server, dex, redis, notifications-controller, applicationset-controller) into the `argocd` namespace.
+This deploys the full Argo CD stack (server, application-controller, repo-server, dex, redis, notifications-controller, applicationset-controller) into the `argocd` namespace, with the `argocd-server` Service patched to `NodePort` for Tailscale access.
 
 ## Application Definitions
 
@@ -109,6 +123,17 @@ After this single command, Argo CD is running and will:
 
 ### Accessing the UI
 
+The `argocd-server` Service is patched to `NodePort` (30080 HTTP, 30443 HTTPS) and proxied through Tailscale Serve on port 8443:
+
+```bash
+# Set up Tailscale Serve (one-time, runs in background)
+tailscale serve --bg --https 8443 https+insecure://localhost:30443
+```
+
+Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8443`
+
+Alternatively, use port-forward if Tailscale is unavailable:
+
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 # Open https://localhost:8080
@@ -134,5 +159,6 @@ kubectl patch application <name> -n argocd \
 ## Operational Notes
 
 - Argo CD runs in the `argocd` namespace, separate from application workloads in `gitea-system`.
-- The `argocd-server` service is `ClusterIP` by default. Use port-forwarding or patch to `LoadBalancer`/`NodePort` for persistent access.
+- The `argocd-server` service is patched to `NodePort` (30080/30443) and exposed via `tailscale serve` on port 8443.
+- When bootstrapping with `kubectl apply -k`, use `--server-side --force-conflicts` to avoid CRD annotation size limits.
 - ConfigMap changes do not trigger pod rollouts automatically. A `kubectl rollout restart` or a Deployment spec change is needed for pods to pick up updated ConfigMaps.

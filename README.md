@@ -12,33 +12,32 @@ flowchart TD
 
     GitHub["GitHub\nholdennguyen/homelab"]
 
+    subgraph tailnet["Tailscale Network"]
+        TServe["tailscale serve\nHTTPS with auto TLS"]
+    end
+
     subgraph orb["OrbStack Kubernetes Cluster"]
         subgraph argocdNs["argocd namespace"]
-            ArgoCD["Argo CD"]
+            ArgoCD["Argo CD\nNodePort :30080/:30443"]
         end
 
         subgraph giteaNs["gitea-system namespace"]
             direction LR
             GiteaPod["Gitea Pod\ngitea/gitea:1.22"]
             PostgresPod["PostgreSQL Pod\npostgres:15"]
-            GiteaSvc["Gitea Service\n:3000, :22"]
+            GiteaSvc["Gitea Service\nNodePort :30300/:30022"]
             PostgresSvc["PostgreSQL Service\n:5432"]
-            GiteaPVC["gitea-data PVC\n10Gi"]
-            PostgresPVC["postgresql-data PVC\n5Gi"]
         end
-
-        Ingress["Ingress\ngitea.homelab.local"]
     end
 
     Git -- "git push" --> GitHub
     GitHub -- "poll & sync" --> ArgoCD
     ArgoCD -- "manages" --> giteaNs
-    Ingress -- ":3000" --> GiteaSvc
+    TServe -- ":443 -> localhost:30300" --> GiteaSvc
+    TServe -- ":8443 -> localhost:30443" --> ArgoCD
     GiteaSvc --> GiteaPod
     GiteaPod -- "PASSWD from Secret" --> PostgresSvc
     PostgresSvc --> PostgresPod
-    GiteaPod --- GiteaPVC
-    PostgresPod --- PostgresPVC
 ```
 
 ## Repository Structure
@@ -89,9 +88,9 @@ sequenceDiagram
 
 | Service | Image | Namespace | Access | Status |
 |---------|-------|-----------|--------|--------|
-| Argo CD | upstream `stable` | `argocd` | `kubectl port-forward svc/argocd-server -n argocd 8080:443` | Healthy |
-| PostgreSQL | `postgres:15` | `gitea-system` | ClusterIP `postgresql:5432` | Healthy |
-| Gitea | `gitea/gitea:1.22` | `gitea-system` | Ingress `https://gitea.homelab.local` | Running |
+| Argo CD | upstream `stable` | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443` | Healthy |
+| PostgreSQL | `postgres:15` | `gitea-system` | ClusterIP `postgresql:5432` (internal only) | Healthy |
+| Gitea | `gitea/gitea:1.22` | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` | Running |
 
 ## Quick Start
 
@@ -100,20 +99,38 @@ sequenceDiagram
 - OrbStack with Kubernetes enabled
 - `kubectl` configured to the OrbStack cluster
 - Git push access to `github.com/holdennguyen/homelab`
+- Tailscale installed with Serve enabled on the tailnet
 
 ### Bootstrap Argo CD
 
 ```bash
-kubectl apply -k k8s/apps/argocd
+kubectl apply -k k8s/apps/argocd --server-side --force-conflicts
 
 # Get the initial admin password
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-
-# Access the UI
-kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
 Argo CD self-manages after the initial `kubectl apply`. It also deploys the PostgreSQL and Gitea Application definitions bundled in `k8s/apps/argocd/kustomization.yaml`.
+
+### Expose Services via Tailscale
+
+Services are exposed through `tailscale serve`, which provides auto-provisioned TLS certificates and makes them accessible from any device on the tailnet.
+
+```bash
+# Gitea on default HTTPS port
+tailscale serve --bg http://localhost:30300
+
+# ArgoCD on port 8443
+tailscale serve --bg --https 8443 https+insecure://localhost:30443
+
+# Verify
+tailscale serve status
+```
+
+Access URLs (from any Tailscale device):
+
+- Gitea: `https://holdens-mac-mini.story-larch.ts.net`
+- ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
 
 ### Verify Deployment
 
@@ -139,7 +156,7 @@ Each service has detailed documentation covering its configuration, integration 
 
 - [Argo CD](k8s/apps/argocd/README.md) -- GitOps controller, Application definitions, sync policies
 - [PostgreSQL](k8s/apps/postgresql/README.md) -- Database configuration, pg_hba.conf, PGDATA layout, Secret management
-- [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, Ingress/TLS setup
+- [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, Tailscale networking
 
 ## Future Plans
 

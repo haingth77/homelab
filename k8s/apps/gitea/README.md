@@ -1,6 +1,6 @@
 # Gitea
 
-Self-hosted Git service running on Kubernetes, backed by PostgreSQL. Provides repository hosting, SSH access, and a web UI accessible at `https://gitea.homelab.local`.
+Self-hosted Git service running on Kubernetes, backed by PostgreSQL. Provides repository hosting, SSH access, and a web UI accessible at `https://holdens-mac-mini.story-larch.ts.net` via Tailscale.
 
 ## Architecture
 
@@ -13,14 +13,12 @@ flowchart TD
             InitContainer -- "copies app.ini\nto PVC" --> GiteaContainer
         end
 
-        GiteaSvc["gitea Service\nClusterIP :3000, :22"]
-        GiteaIngress["gitea-ingress\ngitea.homelab.local"]
+        GiteaSvc["gitea Service\nNodePort :30300/:30022"]
         GiteaPVC["gitea-data PVC\n10Gi RWO"]
         GiteaConfigMap["gitea-config\nConfigMap (app.ini)"]
         GiteaSecret["gitea-secret\n(SECRET_KEY)"]
         PgSecret["postgresql-secret\n(GITEA_DB_PASSWORD)"]
 
-        GiteaIngress -- "HTTPS :443" --> GiteaSvc
         GiteaSvc -- ":3000" --> GiteaContainer
         GiteaContainer -- "mounts /data" --> GiteaPVC
         InitContainer -- "reads /etc/gitea/app.ini" --> GiteaConfigMap
@@ -28,7 +26,8 @@ flowchart TD
         GiteaContainer -- "env: GITEA__security__SECRET_KEY" --> GiteaSecret
     end
 
-    User["Browser"] -- "https://gitea.homelab.local" --> GiteaIngress
+    TServe["tailscale serve\n:443 -> localhost:30300"] -- "HTTPS" --> GiteaSvc
+    User["Browser"] -- "https://holdens-mac-mini\n.story-larch.ts.net" --> TServe
     GiteaContainer -- "postgresql:5432" --> PgSvc["PostgreSQL Service"]
 ```
 
@@ -41,8 +40,7 @@ flowchart TD
 | `secret.yaml` | `GITEA_SECRET_KEY` for session signing and CSRF protection |
 | `configmap.yaml` | `app.ini` with all non-sensitive Gitea configuration |
 | `deployment.yaml` | Deployment with init container, env var overrides, and resource limits |
-| `service.yaml` | ClusterIP Service exposing HTTP (:3000) and SSH (:22) |
-| `ingress.yaml` | HTTPS Ingress for `gitea.homelab.local` with TLS termination |
+| `service.yaml` | NodePort Service exposing HTTP (:30300) and SSH (:30022) |
 
 ## Configuration Strategy
 
@@ -124,9 +122,9 @@ The `app.ini` covers all non-sensitive configuration:
 | Key | Value | Notes |
 |-----|-------|-------|
 | `HTTP_PORT` | `3000` | Container listens here |
-| `ROOT_URL` | `https://gitea.homelab.local/` | External URL for link generation |
+| `ROOT_URL` | `https://holdens-mac-mini.story-larch.ts.net/` | Tailscale hostname for link generation |
 | `START_SSH_SERVER` | `false` | Disabled; the Docker image's OpenSSH handles port 22 |
-| `SSH_DOMAIN` | `gitea.homelab.local` | Used in SSH clone URLs |
+| `SSH_DOMAIN` | `holdens-mac-mini.story-larch.ts.net` | Used in SSH clone URLs |
 | `LFS_START_SERVER` | `true` | Git LFS support |
 
 **`[security]`**:
@@ -150,20 +148,34 @@ flowchart LR
 
 ### Service
 
-The `gitea` Service is `ClusterIP` with two ports:
+The `gitea` Service is `NodePort` with two ports:
 
-| Port | Target | Protocol | Use |
-|------|--------|----------|-----|
-| 3000 | `http` | TCP | Web UI, API, Git HTTP |
-| 22 | `ssh` | TCP | Git SSH operations |
+| Port | NodePort | Target | Protocol | Use |
+|------|----------|--------|----------|-----|
+| 3000 | 30300 | `http` | TCP | Web UI, API, Git HTTP |
+| 22 | 30022 | `ssh` | TCP | Git SSH operations |
 
-### Ingress
+### Tailscale Serve
 
-The Ingress routes `gitea.homelab.local` to the Gitea Service on port 3000:
+External access is provided via `tailscale serve` rather than a Kubernetes Ingress controller. This avoids the need for an ingress controller, certificate management, or DNS configuration.
 
-- Forces SSL redirect via `nginx.ingress.kubernetes.io/force-ssl-redirect: "true"`
-- TLS termination using the `gitea-tls` Secret (must be provisioned separately, e.g., via cert-manager or a self-signed certificate)
-- SSH traffic is not handled by the Ingress (TCP passthrough requires separate configuration)
+```bash
+tailscale serve --bg http://localhost:30300
+```
+
+```mermaid
+flowchart LR
+    Browser["Browser / Git Client"] -- "HTTPS :443" --> TServe["tailscale serve\nauto TLS cert"]
+    TServe -- "HTTP" --> NodePort["localhost:30300"]
+    NodePort --> GiteaSvc["gitea Service\n:3000"]
+    GiteaSvc --> GiteaPod["Gitea Pod"]
+```
+
+Access URL: `https://holdens-mac-mini.story-larch.ts.net`
+
+The TLS certificate is automatically provisioned by Tailscale (Let's Encrypt) for the `*.ts.net` domain. No manual certificate management is needed.
+
+OrbStack NodePorts only bind to `localhost`, not to external interfaces. `tailscale serve` bridges this by listening on the Tailscale interface and proxying to localhost.
 
 ### Storage
 
