@@ -136,38 +136,38 @@ flowchart TD
 
 | Key | Used By | Value Constraints | How to Generate |
 |---|---|---|---|
-| `GITEA_ADMIN_USERNAME` | `gitea-admin-init` Job | Valid Gitea username | e.g. `holden` |
-| `GITEA_ADMIN_PASSWORD` | `gitea-admin-init` Job | Any string | `openssl rand -hex 12` |
-| `GITEA_ADMIN_EMAIL` | `gitea-admin-init` Job | Valid email | your email |
-| `ARGOCD_ADMIN_PASSWORD_BCRYPT` | ESO → `argocd-secret` | bcrypt hash (`$2a$10$...`) | see below |
-| `ARGOCD_ADMIN_PASSWORD` | Reference only (not used by ESO) | Plaintext of the above | your chosen password |
-| `KUBERNETES_DASHBOARD_TOKEN` | Reference only (token is K8s-generated) | Base64-decoded SA token | see below |
+| `GITEA_ADMIN_USERNAME` | `gitea-admin-init` PostSync Job | Valid Gitea username | e.g. `holden` |
+| `GITEA_ADMIN_PASSWORD` | `gitea-admin-init` PostSync Job | Any string | `openssl rand -hex 12` |
+| `GITEA_ADMIN_EMAIL` | `gitea-admin-init` PostSync Job | Valid email | your email |
+| `ARGOCD_ADMIN_PASSWORD` | **Reference only** — not consumed by ESO | Plaintext ArgoCD admin password | your chosen password |
+| `ARGOCD_ADMIN_PASSWORD_BCRYPT` | **Reference only** — managed by Terraform Helm values, not ESO | bcrypt hash of the above | see below |
+| `KUBERNETES_DASHBOARD_TOKEN` | **Reference only** — K8s-generated SA token | Base64-decoded token string | see below |
+
+> **ArgoCD password is NOT managed by ESO.** Using an `ExternalSecret` with `creationPolicy: Merge` to write to `argocd-secret` caused ArgoCD to propagate its tracking annotation onto `argocd-secret` and then prune it (since it wasn't in git). Instead, the bcrypt hash is set via the `configs.secret.argocdServerAdminPassword` Helm value in `terraform/argocd.tf`. The Infisical entries are for team reference only.
 
 ### Generating the ArgoCD bcrypt hash
 
-ArgoCD stores admin passwords as bcrypt hashes. Generate one from your chosen password:
-
 ```bash
-# Option 1 — Python (available on any Mac)
+# Python (available on any Mac)
 python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt(10)).decode())"
-# If bcrypt is not installed: pip3 install bcrypt
+# pip3 install bcrypt if needed
 
-# Option 2 — htpasswd (brew install httpd)
+# Or htpasswd (brew install httpd)
 htpasswd -bnBC 10 "" YOUR_PASSWORD | tr -d ':\n'
 ```
 
-Store both the plaintext (`ARGOCD_ADMIN_PASSWORD`) and the hash (`ARGOCD_ADMIN_PASSWORD_BCRYPT`) in Infisical.
+Store both values in Infisical, then put the hash in `terraform/terraform.tfvars` as `argocd_admin_password_bcrypt` and run `terraform apply`.
 
 ### Retrieving the Kubernetes Dashboard token
 
-After ArgoCD syncs the `kubernetes-dashboard` Application (which creates `admin-user-token`), retrieve it:
+After ArgoCD syncs the `kubernetes-dashboard` Application (which creates the `admin-user-token` Secret), retrieve it:
 
 ```bash
 kubectl get secret admin-user-token -n kubernetes-dashboard \
   -o jsonpath='{.data.token}' | base64 -d
 ```
 
-Paste the output into Infisical as `KUBERNETES_DASHBOARD_TOKEN`. This token never expires (long-lived SA token).
+Paste the output into Infisical as `KUBERNETES_DASHBOARD_TOKEN`. This token is permanently valid (Kubernetes-managed long-lived SA token — it does not expire unless the Secret is deleted).
 
 ## First-Time Setup Walkthrough
 

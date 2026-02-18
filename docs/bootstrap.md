@@ -106,6 +106,11 @@ infisical_auth_secret       = "<output of: openssl rand -base64 32>"
 infisical_postgres_password = "<output of: openssl rand -hex 12>"
 infisical_redis_password    = "<output of: openssl rand -hex 12>"
 
+# ArgoCD admin password — generate bcrypt hash from your chosen password:
+#   python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt(10)).decode())"
+# Store the plaintext in Infisical as ARGOCD_ADMIN_PASSWORD for team reference.
+argocd_admin_password_bcrypt = "<output of bcrypt hash command above>"
+
 # From Infisical UI after first run (see Step 6)
 # Leave placeholder values for the first apply and update after Infisical starts
 infisical_machine_identity_client_id     = "placeholder-update-after-infisical-starts"
@@ -186,15 +191,33 @@ On first visit, Infisical shows a signup screen. Create an admin account.
 
 Navigate to the `homelab` project → `prod` environment → path `/` and add these secrets:
 
+**Database credentials (pulled by ESO into K8s Secrets):**
+
 | Key | Value | How to generate |
 |---|---|---|
 | `POSTGRES_PASSWORD` | random password | `openssl rand -hex 12` |
 | `POSTGRES_USER` | `gitea` | static |
 | `POSTGRES_DB` | `gitea` | static |
-| `GITEA_DB_PASSWORD` | same as POSTGRES_PASSWORD | must match |
+| `GITEA_DB_PASSWORD` | same as `POSTGRES_PASSWORD` | must match exactly |
 | `GITEA_SECRET_KEY` | random base64 | `openssl rand -base64 32` |
 
-> **Important:** `GITEA_DB_PASSWORD` and `POSTGRES_PASSWORD` must be identical. This is the password the Gitea app uses to connect to the PostgreSQL database, and PostgreSQL uses it to authenticate the `gitea` user.
+> **Important:** `GITEA_DB_PASSWORD` and `POSTGRES_PASSWORD` must be identical. PostgreSQL is initialized with `POSTGRES_PASSWORD`; Gitea connects using `GITEA_DB_PASSWORD`. A mismatch causes Gitea to crash with `password authentication failed`.
+
+**Gitea admin credentials (used by the `gitea-admin-init` PostSync Job):**
+
+| Key | Value | How to generate |
+|---|---|---|
+| `GITEA_ADMIN_USERNAME` | your chosen admin username | e.g. `holden` |
+| `GITEA_ADMIN_PASSWORD` | random password | `openssl rand -hex 12` |
+| `GITEA_ADMIN_EMAIL` | your email address | e.g. `you@example.com` |
+
+**Reference credentials (stored for team visibility, not consumed by ESO):**
+
+| Key | Value | How to generate |
+|---|---|---|
+| `ARGOCD_ADMIN_PASSWORD` | ArgoCD admin plaintext password | the password you chose for `argocd_admin_password_bcrypt` in `terraform.tfvars` |
+| `ARGOCD_ADMIN_PASSWORD_BCRYPT` | bcrypt hash of above | the exact hash you put in `terraform.tfvars` |
+| `KUBERNETES_DASHBOARD_TOKEN` | long-lived SA token | run after bootstrap: `kubectl get secret admin-user-token -n kubernetes-dashboard -o jsonpath='{.data.token}' \| base64 -d` |
 
 ### 6e: Create a Machine Identity for ESO
 
@@ -290,9 +313,14 @@ kubectl get pods -A | grep -v Running | grep -v Completed
 kubectl get clustersecretstores
 kubectl get externalsecrets -A
 
-# ArgoCD admin password
+# ArgoCD admin password — from Infisical (ARGOCD_ADMIN_PASSWORD) or auto-generated:
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d; echo
+
+# Kubernetes Dashboard long-lived token
+kubectl get secret admin-user-token -n kubernetes-dashboard \
+  -o jsonpath='{.data.token}' | base64 -d; echo
+# Paste this value into Infisical as KUBERNETES_DASHBOARD_TOKEN
 ```
 
 Access URLs after bootstrap:

@@ -25,8 +25,10 @@ flowchart TD
     subgraph giteaNs["gitea-system namespace"]
         ES1["ExternalSecret: postgresql-secret"]
         ES2["ExternalSecret: gitea-secret"]
+        ES3["ExternalSecret: gitea-admin-secret"]
         K8sS1["K8s Secret: postgresql-secret"]
         K8sS2["K8s Secret: gitea-secret"]
+        K8sS3["K8s Secret: gitea-admin-secret"]
     end
 
     ESOApp -- "installs Helm chart\n(includes CRDs)" --> ESOOperator
@@ -35,10 +37,13 @@ flowchart TD
     MachineIdentitySecret -- "Universal Auth\nclientId + clientSecret" --> InfisicalAPI
     ESOOperator -- "watches" --> ES1
     ESOOperator -- "watches" --> ES2
+    ESOOperator -- "watches" --> ES3
     ES1 -- "fetches via CSS" --> InfisicalAPI
     ES2 -- "fetches via CSS" --> InfisicalAPI
+    ES3 -- "fetches via CSS" --> InfisicalAPI
     ES1 -- "creates/updates" --> K8sS1
     ES2 -- "creates/updates" --> K8sS2
+    ES3 -- "creates/updates" --> K8sS3
 ```
 
 ## Sync Wave Ordering
@@ -177,10 +182,11 @@ env:
 
 ## Current ExternalSecrets
 
-| ExternalSecret | Namespace | K8s Secret Created | Keys |
-|---|---|---|---|
-| `postgresql-secret` | `gitea-system` | `postgresql-secret` | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB`, `GITEA_DB_PASSWORD` |
-| `gitea-secret` | `gitea-system` | `gitea-secret` | `GITEA_SECRET_KEY` |
+| ExternalSecret | Namespace | K8s Secret Created | Keys | Consumed By |
+|---|---|---|---|---|
+| `postgresql-secret` | `gitea-system` | `postgresql-secret` | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB`, `GITEA_DB_PASSWORD` | PostgreSQL Deployment env vars; Gitea DB password |
+| `gitea-secret` | `gitea-system` | `gitea-secret` | `GITEA_SECRET_KEY` | Gitea Deployment `GITEA__security__SECRET_KEY` |
+| `gitea-admin-secret` | `gitea-system` | `gitea-admin-secret` | `GITEA_ADMIN_USERNAME`, `GITEA_ADMIN_PASSWORD`, `GITEA_ADMIN_EMAIL` | `gitea-admin-init` PostSync Job |
 
 ## Operational Commands
 

@@ -85,22 +85,26 @@ The dashboard serves HTTPS on port 8443 inside the container. NodePort 30444 map
 
 ### Authentication
 
-The dashboard requires a Bearer token for login. An `admin-user` ServiceAccount is created with `cluster-admin` privileges:
+The dashboard requires a Bearer token for login. An `admin-user` ServiceAccount is created with `cluster-admin` privileges and a **long-lived Secret** (`admin-user-token`) of type `kubernetes.io/service-account-token` is bound to it. Kubernetes automatically signs and populates this token — it never expires as long as the Secret exists.
 
 ```mermaid
 flowchart LR
     SA["ServiceAccount\nadmin-user"] -- "bound to" --> CRB["ClusterRoleBinding\nadmin-user"]
     CRB -- "references" --> CR["ClusterRole\ncluster-admin"]
     CR -- "grants" --> Access["Full cluster access\n(all namespaces, all resources)"]
+    SA -- "token source" --> Tok["Secret: admin-user-token\ntype: service-account-token\n(auto-signed by K8s)"]
 ```
 
-Generate a login token:
+Retrieve the token:
 
 ```bash
-kubectl -n kubernetes-dashboard create token admin-user --duration=8760h
+kubectl get secret admin-user-token -n kubernetes-dashboard \
+  -o jsonpath='{.data.token}' | base64 -d
 ```
 
-The `--duration=8760h` flag creates a token valid for 1 year. Copy this token and paste it into the dashboard login screen.
+This token is stored in Infisical as `KUBERNETES_DASHBOARD_TOKEN` for team access. Copy it and paste into the dashboard login screen.
+
+> **Why a long-lived Secret instead of `create token`?** The `kubectl create token` command produces a short-lived token (default 1h, max ~1y) that must be regenerated. The `kubernetes.io/service-account-token` Secret type provides a permanent token that never needs rotation unless the Secret itself is deleted or the SA is revoked.
 
 ## Networking
 
@@ -176,8 +180,9 @@ From your iPad or iPhone browser:
 # Check pod status
 kubectl get pods -n kubernetes-dashboard
 
-# Generate a new login token
-kubectl -n kubernetes-dashboard create token admin-user --duration=8760h
+# Retrieve the long-lived login token (also stored in Infisical as KUBERNETES_DASHBOARD_TOKEN)
+kubectl get secret admin-user-token -n kubernetes-dashboard \
+  -o jsonpath='{.data.token}' | base64 -d; echo
 
 # View dashboard logs
 kubectl logs -n kubernetes-dashboard deploy/kubernetes-dashboard
@@ -190,7 +195,7 @@ kubectl rollout restart deployment kubernetes-dashboard -n kubernetes-dashboard
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Login page shows but token rejected | Token expired or wrong ServiceAccount | Generate a new token with `create token admin-user` |
+| Login page shows but token rejected | Wrong token pasted | Retrieve the correct token: `kubectl get secret admin-user-token -n kubernetes-dashboard -o jsonpath='{.data.token}' \| base64 -d` |
 | Dashboard shows no metrics | metrics-scraper pod not running | `kubectl get pods -n kubernetes-dashboard` |
 | 502 from Tailscale | Dashboard pod not ready | Check pod status, wait for readiness |
 | Can't reach :8444 | Tailscale Serve not configured | Run `tailscale serve --bg --https 8444 https+insecure://localhost:30444` |

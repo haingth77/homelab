@@ -19,7 +19,7 @@ flowchart TD
     end
 
     subgraph tfvars["terraform.tfvars (gitignored, local only)"]
-        TFVars["infisical_encryption_key\ninfisical_auth_secret\ninfisical_postgres_password\ninfisical_redis_password\ninfisical_machine_identity_client_id\ninfisical_machine_identity_client_secret\nargocd_repo_ssh_private_key"]
+        TFVars["infisical_encryption_key\ninfisical_auth_secret\ninfisical_postgres_password\ninfisical_redis_password\ninfisical_machine_identity_client_id\ninfisical_machine_identity_client_secret\nargocd_repo_ssh_private_key\nargocd_admin_password_bcrypt"]
     end
 
     subgraph tf["Terraform state"]
@@ -39,6 +39,10 @@ flowchart TD
         subgraph giteaNs["gitea-system namespace"]
             pg_secret["postgresql-secret\n(created by ESO)"]
             gitea_secret["gitea-secret\n(created by ESO)"]
+            gitea_admin_secret["gitea-admin-secret\n(created by ESO)"]
+        end
+        subgraph argocdNs2["argocd namespace"]
+            argocd_secret["argocd-secret\n(admin.password set by Helm)"]
         end
     end
 
@@ -48,23 +52,32 @@ flowchart TD
         POSTGRES_DB["POSTGRES_DB"]
         GITEA_DB_PASSWORD["GITEA_DB_PASSWORD"]
         GITEA_SECRET_KEY["GITEA_SECRET_KEY"]
+        GITEA_ADMIN_USERNAME["GITEA_ADMIN_USERNAME"]
+        GITEA_ADMIN_PASSWORD["GITEA_ADMIN_PASSWORD"]
+        GITEA_ADMIN_EMAIL["GITEA_ADMIN_EMAIL"]
+        ARGOCD_REF["ARGOCD_ADMIN_PASSWORD\nARGOCD_ADMIN_PASSWORD_BCRYPT\n(reference only)"]
+        DASH_TOKEN["KUBERNETES_DASHBOARD_TOKEN\n(reference only)"]
     end
 
     TFVars --> TFState
     TFState --> infisical_secrets
     TFState --> machine_id
     TFState --> helm_secrets
+    TFVars -- "argocd_admin_password_bcrypt\n→ Helm value" --> argocd_secret
     CSS_yaml --> machine_id
     machine_id -- "Universal Auth" --> infisical_store
     ES --> POSTGRES_PASSWORD
     ES --> POSTGRES_USER
     POSTGRES_PASSWORD --> pg_secret
     GITEA_SECRET_KEY --> gitea_secret
+    GITEA_ADMIN_USERNAME --> gitea_admin_secret
+    GITEA_ADMIN_PASSWORD --> gitea_admin_secret
+    GITEA_ADMIN_EMAIL --> gitea_admin_secret
 ```
 
 ## Bootstrap Secrets (Terraform-Managed)
 
-These secrets are the "chicken-and-egg" exceptions — they cannot come from Infisical because Infisical itself needs them to start.
+These secrets are the "chicken-and-egg" exceptions — they cannot come from Infisical because Infisical itself needs them to start. All are created by `terraform apply`, live in `terraform.tfstate` (local only), and are never committed to git.
 
 | K8s Secret | Namespace | Keys | Purpose |
 |---|---|---|---|
@@ -72,8 +85,7 @@ These secrets are the "chicken-and-egg" exceptions — they cannot come from Inf
 | `infisical-helm-secrets` | `argocd` | `values.yaml` (YAML blob) | Postgres + Redis passwords passed to Infisical Helm chart via ArgoCD Application |
 | `infisical-machine-identity` | `external-secrets` | `clientId`, `clientSecret` | ESO authenticates to Infisical using this Universal Auth identity |
 | `repo-homelab` | `argocd` | `sshPrivateKey` | ArgoCD SSH key for cloning the private GitHub repo |
-
-**All of these are created by `terraform apply`.** They live in `terraform.tfstate` (local only) and are never committed to git.
+| `argocd-secret` | `argocd` | `admin.password` (bcrypt hash) | ArgoCD admin password — set via `configs.secret.argocdServerAdminPassword` Helm value from `argocd_admin_password_bcrypt` in tfvars. **Not** managed by ESO to avoid annotation-propagation conflicts. |
 
 ## Infisical Project Structure
 
@@ -89,6 +101,12 @@ flowchart LR
                         s3["POSTGRES_DB"]
                         s4["GITEA_DB_PASSWORD"]
                         s5["GITEA_SECRET_KEY"]
+                        s6["GITEA_ADMIN_USERNAME"]
+                        s7["GITEA_ADMIN_PASSWORD"]
+                        s8["GITEA_ADMIN_EMAIL"]
+                        s9["ARGOCD_ADMIN_PASSWORD\n(reference only)"]
+                        s10["ARGOCD_ADMIN_PASSWORD_BCRYPT\n(reference only)"]
+                        s11["KUBERNETES_DASHBOARD_TOKEN\n(reference only)"]
                     end
                 end
             end
@@ -100,6 +118,8 @@ flowchart LR
 
     MI -- "Member role\non homelab project" --> project
 ```
+
+> **Reference-only secrets** (`ARGOCD_ADMIN_*`, `KUBERNETES_DASHBOARD_TOKEN`) are stored in Infisical purely so the team has one place to look up all credentials. They are **not** pulled by ESO into Kubernetes Secrets — ArgoCD's password is set via Terraform Helm values, and the Dashboard token is a Kubernetes-generated SA token.
 
 The ClusterSecretStore in `k8s/apps/external-secrets/cluster-secret-store.yaml` is configured with:
 - `projectSlug: homelab`
@@ -241,6 +261,25 @@ ArgoCD will detect the new `ExternalSecret` and sync it. ESO will then create th
 1. Update `terraform/terraform.tfvars` with new values.
 2. Run `terraform apply`.
 3. Restart the Infisical pod: `kubectl rollout restart deployment -n infisical -l app.kubernetes.io/component=infisical`
+
+### Rotating the ArgoCD Admin Password
+
+ArgoCD's admin password is managed through Terraform Helm values, not ESO. The bcrypt hash is stored in `terraform.tfvars` and applied to the `argocd-secret` via the Helm release.
+
+1. Choose a new password and generate its bcrypt hash:
+   ```bash
+   python3 -c "import bcrypt; print(bcrypt.hashpw(b'NEW_PASSWORD', bcrypt.gensalt(10)).decode())"
+   ```
+2. Update `terraform/terraform.tfvars`:
+   ```hcl
+   argocd_admin_password_bcrypt = "$2a$10$<new-hash>"
+   ```
+3. Update Infisical: set `ARGOCD_ADMIN_PASSWORD` and `ARGOCD_ADMIN_PASSWORD_BCRYPT` to the new values.
+4. Apply:
+   ```bash
+   cd terraform && terraform apply
+   ```
+   Helm updates `argocd-secret` with the new hash. ArgoCD picks it up on the next login — no pod restart required.
 
 ### Rotating the ArgoCD SSH Deploy Key
 

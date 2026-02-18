@@ -37,7 +37,9 @@ flowchart TD
 |------|---------|
 | `kustomization.yaml` | Lists all resources for Kustomize/ArgoCD rendering |
 | `pvc.yaml` | 10Gi `ReadWriteOnce` PVC for Gitea repositories and data |
-| `external-secret.yaml` | `ExternalSecret` that pulls `GITEA_SECRET_KEY` from Infisical via ESO |
+| `external-secret.yaml` | `ExternalSecret` that pulls `GITEA_SECRET_KEY` from Infisical → `gitea-secret` |
+| `admin-external-secret.yaml` | `ExternalSecret` that pulls admin credentials from Infisical → `gitea-admin-secret` |
+| `admin-init-job.yaml` | ArgoCD PostSync `Job` that creates or updates the Gitea admin user after every sync |
 | `configmap.yaml` | `app.ini` with all non-sensitive Gitea configuration |
 | `deployment.yaml` | Deployment with init container, env var overrides, and resource limits |
 | `service.yaml` | NodePort Service exposing HTTP (:30300) and SSH (:30022) |
@@ -243,6 +245,44 @@ flowchart TD
     ORM --> PG
 ```
 
+## Admin User Management
+
+The `gitea-admin-init` Job (an ArgoCD PostSync hook) creates or updates the Gitea admin user after every sync. It runs as the `git` user (UID 1000) inside the running Gitea pod using `kubectl exec`, which avoids config file issues.
+
+```mermaid
+sequenceDiagram
+    participant ArgoCD
+    participant Job as gitea-admin-init Job
+    participant Gitea as Gitea Pod (git user)
+    participant Infisical
+
+    ArgoCD->>Job: PostSync — create Job
+    Job->>Gitea: kubectl exec — wait for gitea admin user list
+    Note over Job,Gitea: credentials base64-encoded,<br/>decoded inside the pod
+    Gitea-->>Job: Ready
+    Job->>Gitea: gitea admin user create/change-password
+    Job->>Gitea: gitea admin user must-change-password --all --unset
+    Gitea-->>Job: Success
+    Job-->>ArgoCD: Completed
+```
+
+The admin credentials are pulled from Infisical into `gitea-admin-secret` by `admin-external-secret.yaml` before the Job runs.
+
+**To update the admin password:** Change `GITEA_ADMIN_PASSWORD` in Infisical, force-sync the ExternalSecret, then trigger an ArgoCD sync to re-run the PostSync job.
+
+```bash
+# Force ESO to pull the new password
+kubectl annotate externalsecret gitea-admin-secret -n gitea-system \
+  force-sync=$(date +%s) --overwrite
+
+# Check admin user credentials are correct
+GITEA_USER=$(kubectl get secret gitea-admin-secret -n gitea-system \
+  -o jsonpath='{.data.GITEA_ADMIN_USERNAME}' | base64 -d)
+GITEA_PASS=$(kubectl get secret gitea-admin-secret -n gitea-system \
+  -o jsonpath='{.data.GITEA_ADMIN_PASSWORD}' | base64 -d)
+curl -s "http://localhost:30300/api/v1/user" -u "${GITEA_USER}:${GITEA_PASS}" | python3 -m json.tool
+```
+
 ## Operational Commands
 
 ```bash
@@ -255,17 +295,23 @@ kubectl logs -n gitea-system deploy/gitea -c gitea
 # View init container logs
 kubectl logs -n gitea-system deploy/gitea -c init-config
 
-# Test API
-kubectl exec -n gitea-system deploy/gitea -c gitea -- \
-  wget -qO- http://localhost:3000/api/v1/settings/api
+# Check admin-init job logs (PostSync)
+kubectl logs -n gitea-system -l job-name=gitea-admin-init
+
+# Test API with admin credentials from secret
+GITEA_USER=$(kubectl get secret gitea-admin-secret -n gitea-system \
+  -o jsonpath='{.data.GITEA_ADMIN_USERNAME}' | base64 -d)
+GITEA_PASS=$(kubectl get secret gitea-admin-secret -n gitea-system \
+  -o jsonpath='{.data.GITEA_ADMIN_PASSWORD}' | base64 -d)
+curl -s "http://localhost:30300/api/v1/user" -u "${GITEA_USER}:${GITEA_PASS}"
 
 # Check effective app.ini on the PVC
 kubectl exec -n gitea-system deploy/gitea -c gitea -- \
   cat /data/gitea/conf/app.ini
 
-# Create first admin user (interactive)
-kubectl exec -it -n gitea-system deploy/gitea -c gitea -- \
-  gitea admin user create --admin --username admin --password <password> --email admin@homelab.local
+# List Gitea users (run as git user inside pod)
+kubectl exec -n gitea-system deploy/gitea -- \
+  su git -s /bin/sh -c 'gitea admin user list'
 ```
 
 ## Troubleshooting

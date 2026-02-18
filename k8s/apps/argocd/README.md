@@ -93,6 +93,8 @@ ArgoCD runs in **insecure mode** (`server.insecure = true`) — it serves plain 
 | `server.service.type` | `NodePort` | Terraform Helm values |
 | `server.service.nodePorts.http` | `30080` | Terraform Helm values |
 | `configs.params.server.insecure` | `true` | Terraform Helm values |
+| `configs.secret.argocdServerAdminPassword` | bcrypt hash | Terraform Helm values (`argocd_admin_password_bcrypt` tfvar) |
+| `configs.cm.resource.customizations.ignoreDifferences.external-secrets.io_ExternalSecret` | `jsonPointers: [/metadata/finalizers]` | Terraform Helm values — prevents ESO finalizer from causing permanent OutOfSync |
 | Chart version | `7.8.0` | `terraform/variables.tf` default |
 
 ## Repository Authentication
@@ -154,12 +156,18 @@ ArgoCD is accessible at `https://holdens-mac-mini.story-larch.ts.net:8443` from 
 tailscale serve --bg --https 8443 http://localhost:30080
 ```
 
-**Retrieve admin password:**
+**Admin credentials:**
+
+The ArgoCD admin password is managed via Terraform Helm values (`argocd_admin_password_bcrypt` in `terraform/terraform.tfvars`). The plaintext is stored in Infisical as `ARGOCD_ADMIN_PASSWORD` for team reference.
 
 ```bash
+# Retrieve from Infisical UI → homelab / prod → ARGOCD_ADMIN_PASSWORD
+# Or from the initial-admin-secret if it matches the hash in terraform.tfvars:
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d
 ```
+
+To rotate the password, see [terraform/README.md — Rotate the ArgoCD Admin Password](../../../terraform/README.md).
 
 ## Operational Commands
 
