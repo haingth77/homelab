@@ -19,7 +19,7 @@ flowchart TD
     end
 
     subgraph infisical["Infisical"]
-        Secrets["homelab / prod\nOPENCLAW_GATEWAY_TOKEN\nANTHROPIC_API_KEY\nOPENAI_API_KEY"]
+        Secrets["homelab / prod\nOPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY"]
     end
 
     ES -- "secretStoreRef" --> CSS
@@ -73,7 +73,7 @@ To add more model providers or channel tokens (e.g., `ANTHROPIC_API_KEY`, `OPENA
 
 | Layer | Value |
 |---|---|
-| Container port | 3000 |
+| Container port | 18789 |
 | NodePort | 30789 |
 | Tailscale HTTPS | 8446 |
 | URL | `https://holdens-mac-mini.story-larch.ts.net:8446` |
@@ -83,6 +83,41 @@ One-time Tailscale Serve setup:
 ```bash
 tailscale serve --bg --https 8446 http://localhost:30789
 ```
+
+## Running CLI Commands Inside the Pod
+
+The OpenClaw CLI is available inside the running pod. Use `kubectl exec` to run any `openclaw` subcommand:
+
+```bash
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js <command>
+```
+
+The gateway listens on port 18789 (OpenClaw's default), so CLI commands auto-discover it without extra flags.
+
+## Device Pairing (First Connection)
+
+When you connect to the Control UI from a new browser or device, the gateway requires a **one-time pairing approval**. This is a security measure -- even with the correct gateway token, remote connections must be explicitly approved.
+
+**What you'll see in the UI:** `disconnected (1008): pairing required`
+
+**To approve the device:**
+
+```bash
+# 1. List pending pairing requests
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# 2. Approve by request ID (from the "Request" column)
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+```
+
+After approval, refresh the UI and click **Connect**. The device is remembered and won't require re-approval unless revoked.
+
+**Notes:**
+
+- Each browser profile generates a unique device ID -- switching browsers or clearing browser data requires re-pairing.
+- Connections from `127.0.0.1` (e.g., `kubectl port-forward`) are auto-approved.
+- All remote connections (Tailscale, LAN) require explicit approval.
+- To revoke a device: `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices revoke --device <id> --role <role>`
 
 ## Operational Commands
 
@@ -104,13 +139,35 @@ kubectl annotate externalsecret openclaw-secret -n openclaw \
   force-sync=$(date +%s) --overwrite
 
 # Port-forward for local testing (bypasses Tailscale)
-kubectl port-forward -n openclaw svc/openclaw 3000:3000
+kubectl port-forward -n openclaw svc/openclaw 18789:18789
+
+# --- OpenClaw CLI (inside the pod) ---
+
+# List paired and pending devices
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# Approve a pending device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+
+# Gateway health check
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js health
+
+# Open dashboard URL (prints the URL with embedded token)
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js dashboard --no-open
+
+# List connected channels
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js channels status
+
+# Run diagnostics
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js doctor
 ```
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `disconnected (1008): pairing required` | New browser/device not approved | Run `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list` then `devices approve <requestId>` |
+| `disconnected (1008): unauthorized: gateway token missing` | Token not entered in UI | Open Control UI settings and paste the `OPENCLAW_GATEWAY_TOKEN` value |
 | `ErrImageNeverPull` | Image not built locally | Run `./scripts/build-openclaw.sh` |
 | Pod `CrashLoopBackOff` | Missing secrets or bad config | Check `kubectl logs -n openclaw deploy/openclaw` |
 | ExternalSecret `SecretSyncedError` | Secret not in Infisical | Add missing key to Infisical `homelab / prod` |

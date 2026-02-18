@@ -27,8 +27,6 @@ spec:
             - dist/index.js
             - gateway
             - --allow-unconfigured
-            - --port
-            - "3000"
             - --bind
             - lan
           env:
@@ -56,7 +54,7 @@ spec:
                   key: GEMINI_API_KEY
           ports:
             - name: http
-              containerPort: 3000
+              containerPort: 18789
           volumeMounts:
             - name: openclaw-data
               mountPath: /data

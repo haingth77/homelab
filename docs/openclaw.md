@@ -14,7 +14,7 @@ flowchart TD
     subgraph orb["OrbStack Kubernetes Cluster"]
         subgraph openclawNs["openclaw namespace"]
             Svc["Service\nNodePort :30789"]
-            Deploy["OpenClaw Gateway\nPort :3000"]
+            Deploy["OpenClaw Gateway\nPort :18789"]
             PVC["PVC: openclaw-data\n5Gi"]
             ES["ExternalSecret:\nopenclaw-secret"]
             K8sSecret["K8s Secret:\nopenclaw-secret"]
@@ -158,6 +158,76 @@ tailscale serve --bg --https 8446 http://localhost:30789
 
 Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8446`
 
+## Running CLI Commands Inside the Pod
+
+The OpenClaw CLI is built into the container image. Run any `openclaw` subcommand via `kubectl exec`:
+
+```bash
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js <command>
+```
+
+The gateway uses its default port (18789) inside the pod, so CLI commands auto-discover it without extra env vars or flags.
+
+Common commands:
+
+```bash
+# Gateway health
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js health
+
+# List devices (paired + pending)
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# Approve a device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+
+# Print dashboard URL with embedded token
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js dashboard --no-open
+
+# Run diagnostics
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js doctor
+```
+
+## First Connection: Device Pairing
+
+OpenClaw requires a **one-time device pairing approval** for every new browser or device that connects to the Control UI over the network. This is a security measure separate from the gateway token -- even with the correct token, remote connections must be explicitly approved.
+
+### What Happens
+
+1. Open the Control UI at `https://holdens-mac-mini.story-larch.ts.net:8446`
+2. Enter your `OPENCLAW_GATEWAY_TOKEN` in the settings panel and click **Connect**
+3. You see: `disconnected (1008): pairing required`
+
+This is expected. The browser generated a unique device ID and sent a pairing request to the gateway.
+
+### Approve the Device
+
+```bash
+# List pending pairing requests
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# Find the request ID in the "Request" column and approve it
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+```
+
+After approval, go back to the UI and click **Connect** again. The connection should succeed.
+
+### Pairing Rules
+
+- **Local connections** (`127.0.0.1`, e.g., via `kubectl port-forward`) are auto-approved.
+- **Remote connections** (Tailscale, LAN) always require explicit approval.
+- **Each browser profile** generates a unique device ID. Switching browsers, clearing browser data, or using incognito mode requires re-pairing.
+- **Approval persists** across gateway restarts (stored in the PVC at `/data`).
+- **Revoke a device**: `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices revoke --device <id> --role <role>`
+
+### Retrieve the Gateway Token
+
+If you need to retrieve the token value stored in the cluster:
+
+```bash
+kubectl get secret openclaw-secret -n openclaw \
+  -o jsonpath='{.data.OPENCLAW_GATEWAY_TOKEN}' | base64 -d
+```
+
 ## Networking
 
 ```mermaid
@@ -165,7 +235,7 @@ flowchart LR
     Browser["Browser / Agent Client"]
     TS["Tailscale Serve\nHTTPS :8446\nLet's Encrypt cert"]
     NP["NodePort :30789\nlocalhost"]
-    Pod["OpenClaw Pod\n:3000"]
+    Pod["OpenClaw Pod\n:18789"]
 
     Browser -- "WireGuard\nhttps://holdens-mac-mini\n.story-larch.ts.net:8446" --> TS
     TS -- "http://localhost:30789" --> NP
@@ -174,7 +244,7 @@ flowchart LR
 
 | Layer | Port | Protocol |
 |---|---|---|
-| Container | 3000 | HTTP |
+| Container | 18789 | HTTP |
 | NodePort | 30789 | HTTP (localhost only) |
 | Tailscale Serve | 8446 | HTTPS (Let's Encrypt) |
 
@@ -208,6 +278,8 @@ kubectl rollout status deployment/openclaw -n openclaw
 
 ## Operational Commands
 
+### Kubernetes
+
 ```bash
 # Pod status
 kubectl get pods -n openclaw
@@ -229,16 +301,46 @@ kubectl annotate externalsecret openclaw-secret -n openclaw \
   force-sync=$(date +%s) --overwrite
 
 # Port-forward for local testing (bypasses Tailscale)
-kubectl port-forward -n openclaw svc/openclaw 3000:3000
+kubectl port-forward -n openclaw svc/openclaw 18789:18789
 
 # Check ArgoCD application sync status
 kubectl get application openclaw -n argocd
+```
+
+### OpenClaw CLI (via kubectl exec)
+
+```bash
+# Gateway health check
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js health
+
+# List paired and pending devices
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# Approve a pending device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+
+# Revoke a device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices revoke --device <id> --role <role>
+
+# Print dashboard URL with embedded token
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js dashboard --no-open
+
+# List connected channels
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js channels status
+
+# Run diagnostics
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js doctor
+
+# View/edit gateway config
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js config get
 ```
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `disconnected (1008): pairing required` | New browser/device needs approval | `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list` then `devices approve <requestId>` |
+| `unauthorized: gateway token missing` | Token not set in UI settings | Open Control UI settings, paste the `OPENCLAW_GATEWAY_TOKEN` |
 | `ErrImageNeverPull` | Docker image not built locally | Run `./scripts/build-openclaw.sh` |
 | Pod `CrashLoopBackOff` | Missing secrets or config error | `kubectl logs -n openclaw deploy/openclaw` — check for missing env vars |
 | ExternalSecret `SecretSyncedError` | Secret key missing in Infisical | Add the missing key to Infisical `homelab / prod /` |
