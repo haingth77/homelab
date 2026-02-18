@@ -1,0 +1,22 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit it.
+
+kube_context     = "orbstack"
+argocd_version   = "7.8.0"
+homelab_repo_url = "https://github.com/holdennguyen/homelab.git"
+
+# Generate: openssl rand -hex 16
+infisical_encryption_key = "REPLACE_WITH_32_CHAR_HEX"
+
+# Generate: openssl rand -base64 32
+infisical_auth_secret = "REPLACE_WITH_BASE64_RANDOM"
+
+# Generate: openssl rand -hex 12
+infisical_postgres_password = "REPLACE_WITH_POSTGRES_PASSWORD"
+
+# Generate: openssl rand -hex 12
+infisical_redis_password = "REPLACE_WITH_REDIS_PASSWORD"
+
+# From Infisical UI: Settings → Machine Identities → Create → Universal Auth
+infisical_machine_identity_client_id     = "REPLACE_WITH_CLIENT_ID"
+infisical_machine_identity_client_secret = "REPLACE_WITH_CLIENT_SECRET"

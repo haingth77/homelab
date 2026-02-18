@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# The infisical-machine-identity Secret is created by Terraform (bootstrap-secrets.tf).
+# Only the ClusterSecretStore is managed here by ArgoCD.
+resources:
+  - cluster-secret-store.yaml

@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - pvc.yaml
-  - secret.yaml
+  - external-secret.yaml
   - deployment.yaml
   - service.yaml
   - postgresql-hba-config.yaml

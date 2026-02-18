@@ -7,7 +7,8 @@ A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys s
 ```mermaid
 flowchart TD
     subgraph dev["Developer Workstation (Mac mini M4)"]
-        Git["Git CLI"]
+        Git["git push"]
+        TF["terraform apply\n(bootstrap only)"]
     end
 
     GitHub["GitHub\nholdennguyen/homelab"]
@@ -18,32 +19,46 @@ flowchart TD
 
     subgraph orb["OrbStack Kubernetes Cluster"]
         subgraph argocdNs["argocd namespace"]
-            ArgoCD["Argo CD\nNodePort :30080/:30443"]
+            ArgoCD["Argo CD\nHelm chart via Terraform\nNodePort :30080"]
+        end
+
+        subgraph infisicalNs["infisical namespace"]
+            InfisicalSvc["Infisical\nNodePort :30445"]
+        end
+
+        subgraph esoNs["external-secrets namespace"]
+            ESO["External Secrets Operator"]
+            CSS["ClusterSecretStore → Infisical"]
         end
 
         subgraph giteaNs["gitea-system namespace"]
             direction LR
-            GiteaPod["Gitea Pod\ngitea/gitea:1.22"]
-            PostgresPod["PostgreSQL Pod\npostgres:15"]
-            GiteaSvc["Gitea Service\nNodePort :30300/:30022"]
-            PostgresSvc["PostgreSQL Service\n:5432"]
+            GiteaPod["Gitea Pod"]
+            PostgresPod["PostgreSQL Pod"]
+            GiteaSvc["Gitea Service\nNodePort :30300"]
         end
 
         subgraph dashNs["kubernetes-dashboard namespace"]
-            DashPod["Dashboard Pod\nv2.7.0"]
+            DashPod["Dashboard Pod\nNodePort :30444"]
         end
     end
 
+    TF -- "Helm release" --> ArgoCD
+    TF -- "bootstrap K8s Secrets\n(never in git)" --> infisicalNs
+    TF -- "bootstrap K8s Secrets\n(never in git)" --> esoNs
     Git -- "git push" --> GitHub
     GitHub -- "poll & sync" --> ArgoCD
-    ArgoCD -- "manages" --> giteaNs
-    ArgoCD -- "manages" --> dashNs
-    TServe -- ":443 -> localhost:30300" --> GiteaSvc
-    TServe -- ":8443 -> localhost:30443" --> ArgoCD
-    TServe -- ":8444 -> localhost:30444" --> DashPod
-    GiteaSvc --> GiteaPod
-    GiteaPod -- "PASSWD from Secret" --> PostgresSvc
-    PostgresSvc --> PostgresPod
+    ArgoCD -- "App of Apps" --> infisicalNs
+    ArgoCD -- "App of Apps" --> esoNs
+    ArgoCD -- "App of Apps" --> giteaNs
+    ArgoCD -- "App of Apps" --> dashNs
+    ESO --> CSS
+    CSS -- "ExternalSecret" --> GiteaPod
+    CSS -- "ExternalSecret" --> PostgresPod
+    TServe -- ":443 -> :30300" --> GiteaSvc
+    TServe -- ":8443 -> :30080" --> ArgoCD
+    TServe -- ":8444 -> :30444" --> DashPod
+    TServe -- ":8445 -> :30445" --> InfisicalSvc
 ```
 
 ## Repository Structure
@@ -51,6 +66,14 @@ flowchart TD
 ```
 homelab/
 ├── README.md
+├── .gitignore                     # Excludes terraform.tfvars and .terraform/
+├── terraform/                     # Bootstrap layer (run once, not GitOps)
+│   ├── providers.tf               # kubernetes + helm provider config
+│   ├── argocd.tf                  # ArgoCD Helm release + root Application CR
+│   ├── bootstrap-secrets.tf       # K8s Secrets created from tfvars (never in git)
+│   ├── variables.tf               # Variable declarations
+│   ├── outputs.tf                 # Useful post-apply instructions
+│   └── terraform.tfvars.example   # Template — copy to terraform.tfvars and fill in
 ├── agents/                        # AI agent skill definitions
 │   ├── root_rules.md              # Shared rules all agents follow
 │   ├── devops_sre_agent/          # Infrastructure & reliability
@@ -63,10 +86,12 @@ homelab/
 │   └── networking.md              # Tailscale + NodePort deep dive
 ├── k8s/                           # Kubernetes manifests (GitOps root)
 │   └── apps/
-│       ├── argocd/                # Argo CD + Application definitions
-│       ├── gitea/                 # Gitea git server manifests
+│       ├── argocd/                # App of Apps — Application CRs only
+│       ├── external-secrets/      # ESO ClusterSecretStore config
+│       ├── infisical/             # Infisical deployment (Helm via ArgoCD App)
+│       ├── gitea/                 # Gitea manifests (ExternalSecret, no plain Secrets)
 │       ├── kubernetes-dashboard/  # Cluster monitoring dashboard
-│       └── postgresql/            # PostgreSQL database manifests
+│       └── postgresql/            # PostgreSQL manifests (ExternalSecret, no plain Secrets)
 ├── openclaw/                      # Core AI agent framework (submodule)
 └── skills/                        # Shared agent skill modules
 ```
@@ -95,73 +120,97 @@ sequenceDiagram
 
 ## Deployed Services
 
-| Service | Image | Namespace | Access | Status |
-|---------|-------|-----------|--------|--------|
-| Argo CD | upstream `stable` | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443` | Healthy |
-| Gitea | `gitea/gitea:1.22` | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` | Healthy |
-| PostgreSQL | `postgres:15` | `gitea-system` | ClusterIP `postgresql:5432` (internal only) | Healthy |
-| K8s Dashboard | `v2.7.0` | `kubernetes-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8444` | Healthy |
+| Service | Source | Namespace | Access |
+|---------|--------|-----------|--------|
+| Argo CD | Helm chart via Terraform | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443` |
+| Infisical | Helm chart via ArgoCD | `infisical` | `https://holdens-mac-mini.story-larch.ts.net:8445` |
+| External Secrets Operator | Helm chart via ArgoCD | `external-secrets` | internal only |
+| Gitea | Kustomize via ArgoCD | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` |
+| PostgreSQL | Kustomize via ArgoCD | `gitea-system` | ClusterIP `postgresql:5432` (internal only) |
+| K8s Dashboard | Kustomize via ArgoCD | `kubernetes-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
 
 ## Quick Start
 
 ### Prerequisites
 
 - OrbStack with Kubernetes enabled
-- `kubectl` configured to the OrbStack cluster
+- `kubectl` and `terraform` (>= 1.6) installed
 - Git push access to `github.com/holdennguyen/homelab`
 - Tailscale installed with Serve enabled on the tailnet
 
-### Bootstrap Argo CD
+### 1. Prepare Terraform variables
 
 ```bash
-kubectl apply -k k8s/apps/argocd --server-side --force-conflicts
-
-# Get the initial admin password
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+# Edit terraform/terraform.tfvars and fill in all values.
+# Generate secrets with:
+#   openssl rand -hex 16          # ENCRYPTION_KEY
+#   openssl rand -base64 32       # AUTH_SECRET
+#   openssl rand -hex 12          # postgres / redis passwords
 ```
 
-Argo CD self-manages after the initial `kubectl apply`. It also deploys the PostgreSQL and Gitea Application definitions bundled in `k8s/apps/argocd/kustomization.yaml`.
-
-### Expose Services via Tailscale
-
-Services are exposed through `tailscale serve`, which provides auto-provisioned TLS certificates and makes them accessible from any device on the tailnet.
+### 2. Bootstrap (Terraform)
 
 ```bash
-# Gitea on default HTTPS port
-tailscale serve --bg http://localhost:30300
+cd terraform
+terraform init
+terraform apply
+```
 
-# ArgoCD on port 8443
-tailscale serve --bg --https 8443 https+insecure://localhost:30443
+This installs ArgoCD via Helm, creates all bootstrap K8s Secrets (never in git), and registers the root ArgoCD Application. After apply completes, ArgoCD will auto-sync and deploy every other service.
 
-# Kubernetes Dashboard on port 8444
-tailscale serve --bg --https 8444 https+insecure://localhost:30444
+```bash
+# Get the initial ArgoCD admin password
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
+```
 
-# Verify
+### 3. Populate secrets in Infisical
+
+Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the Infisical UI and create the following secrets in a project (e.g. `homelab / production`):
+
+| Key | Description |
+|-----|-------------|
+| `POSTGRES_PASSWORD` | PostgreSQL password for Gitea |
+| `POSTGRES_USER` | `gitea` |
+| `POSTGRES_DB` | `gitea` |
+| `GITEA_DB_PASSWORD` | Same as `POSTGRES_PASSWORD` |
+| `GITEA_SECRET_KEY` | Random base64 string (`openssl rand -base64 32`) |
+
+Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to rotate the bootstrap credential.
+
+### 4. Expose Services via Tailscale
+
+Run once on the Mac mini (persists across reboots):
+
+```bash
+tailscale serve --bg http://localhost:30300                       # Gitea
+tailscale serve --bg --https 8443 http://localhost:30080          # ArgoCD
+tailscale serve --bg --https 8444 https+insecure://localhost:30444 # K8s Dashboard
+tailscale serve --bg --https 8445 http://localhost:30445          # Infisical
+
 tailscale serve status
 ```
 
-Access URLs (from any Tailscale device -- iPhone, iPad, Mac, etc.):
+Access URLs (any Tailscale device):
 
 - Gitea: `https://holdens-mac-mini.story-larch.ts.net`
 - ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
 - K8s Dashboard: `https://holdens-mac-mini.story-larch.ts.net:8444`
+- Infisical: `https://holdens-mac-mini.story-larch.ts.net:8445`
 
 ### Verify Deployment
 
 ```bash
-# Check Argo CD applications
-kubectl get applications -n argocd
+# Watch all ArgoCD Applications converge
+kubectl get applications -n argocd -w
+
+# Check ExternalSecrets resolved correctly
+kubectl get externalsecret -n gitea-system
 
 # Check running pods
 kubectl get pods -n gitea-system
-
-# Test Gitea API
-kubectl exec -n gitea-system deploy/gitea -c gitea -- \
-  wget -qO- http://localhost:3000/api/v1/settings/api
-
-# Test PostgreSQL
-kubectl exec -n gitea-system deploy/postgresql -- \
-  psql -U gitea -d gitea -c '\dt'
+kubectl get pods -n infisical
 ```
 
 ## Component Documentation
@@ -177,8 +226,7 @@ Each service has detailed documentation covering its configuration, integration 
 ## Future Plans
 
 1. **Observability** -- Prometheus, Grafana, Loki for monitoring and logging
-2. **Secret Management** -- Sealed Secrets or External Secrets Operator to replace plaintext base64 Secrets
-3. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
-4. **Openclaw Deployment** -- Containerize and deploy the AI agent framework to the cluster
-5. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
-6. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning
+2. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
+3. **Openclaw Deployment** -- Containerize and deploy the AI agent framework to the cluster
+4. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
+5. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning
