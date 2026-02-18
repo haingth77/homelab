@@ -18,6 +18,16 @@ spec:
         app.kubernetes.io/name: gitea
         app.kubernetes.io/instance: gitea
     spec:
+      initContainers:
+        - name: init-config
+          image: busybox:1.36
+          command: ['sh', '-c', 'mkdir -p /data/gitea/conf && cp /etc/gitea/app.ini /data/gitea/conf/app.ini']
+          volumeMounts:
+            - name: gitea-data
+              mountPath: /data
+            - name: gitea-config
+              mountPath: /etc/gitea
+              readOnly: true
       containers:
         - name: gitea
           image: gitea/gitea:1.22
@@ -40,9 +50,6 @@ spec:
           volumeMounts:
             - name: gitea-data
               mountPath: /data
-            - name: gitea-config
-              mountPath: /etc/gitea
-              readOnly: true
           resources:
             requests:
               cpu: 100m
