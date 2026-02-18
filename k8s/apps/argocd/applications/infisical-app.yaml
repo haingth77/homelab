@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infisical
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+    chart: infisical-standalone
+    targetRevision: "1.7.2"
+    helm:
+      valuesObject:
+        infisical:
+          replicaCount: 1
+          kubeSecretRef: infisical-secrets
+          service:
+            type: NodePort
+            nodePort: "30445"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+        ingress:
+          enabled: false
+        postgresql:
+          enabled: true
+          fullnameOverride: infisical-postgresql
+          auth:
+            username: infisical
+            password: a54570cfc9e6a6c91750046b
+            database: infisicalDB
+        redis:
+          enabled: true
+          fullnameOverride: infisical-redis
+          architecture: standalone
+          auth:
+            password: "58484c16d50c7939206f4875"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infisical
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data

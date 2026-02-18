@@ -5,6 +5,8 @@ resources:
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
   - applications/kubernetes-dashboard-app.yaml
+  - applications/external-secrets-app.yaml
+  - applications/infisical-app.yaml
 patches:
   - target:
       kind: Service
