@@ -1,1 +1,7 @@
-../README.md
+---
+title: Home
+---
+
+{%
+   include-markdown "../README.md"
+%}

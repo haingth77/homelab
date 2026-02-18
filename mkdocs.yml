@@ -20,6 +20,10 @@ theme:
     - content.code.copy
     - search.highlight
 
+plugins:
+  - search
+  - include-markdown
+
 markdown_extensions:
   - pymdownx.superfences:
       custom_fences:
