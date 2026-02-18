@@ -12,3 +12,5 @@ resources:
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
   - applications/kubernetes-dashboard-app.yaml
+  # Merges the ArgoCD admin password (bcrypt hash) from Infisical into argocd-secret.
+  - admin-password-external-secret.yaml

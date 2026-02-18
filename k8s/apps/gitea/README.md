@@ -35,27 +35,44 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `kustomization.yaml` | Lists all resources for Kustomize/Argo CD rendering |
+| `kustomization.yaml` | Lists all resources for Kustomize/ArgoCD rendering |
 | `pvc.yaml` | 10Gi `ReadWriteOnce` PVC for Gitea repositories and data |
-| `secret.yaml` | `GITEA_SECRET_KEY` for session signing and CSRF protection |
+| `external-secret.yaml` | `ExternalSecret` that pulls `GITEA_SECRET_KEY` from Infisical via ESO |
 | `configmap.yaml` | `app.ini` with all non-sensitive Gitea configuration |
 | `deployment.yaml` | Deployment with init container, env var overrides, and resource limits |
 | `service.yaml` | NodePort Service exposing HTTP (:30300) and SSH (:30022) |
 
 ## Configuration Strategy
 
-Gitea configuration uses a two-layer approach:
+Gitea configuration uses a three-layer approach:
 
-1. **ConfigMap** (`configmap.yaml`) -- holds all non-sensitive settings in `app.ini` format
-2. **Secret-backed env vars** -- inject sensitive values that override specific `app.ini` keys
+1. **ConfigMap** (`configmap.yaml`) — holds all non-sensitive settings in `app.ini` format
+2. **ExternalSecret** (`external-secret.yaml`) — ESO pulls `GITEA_SECRET_KEY` from Infisical and creates the `gitea-secret` K8s Secret
+3. **Secret-backed env vars** — inject sensitive values from K8s Secrets, overriding specific `app.ini` keys
+
+> **No `secret.yaml`:** There is no static `Secret` manifest in this directory. All secrets originate in Infisical and are synchronized by the External Secrets Operator. See [docs/secret-management.md](../../docs/secret-management.md) for details.
 
 ```mermaid
 flowchart LR
-    subgraph sources["Configuration Sources"]
+    subgraph infisical["Infisical (homelab/prod)"]
+        IS1["GITEA_SECRET_KEY"]
+        IS2["GITEA_DB_PASSWORD"]
+        IS3["POSTGRES_PASSWORD"]
+    end
+
+    subgraph eso["External Secrets Operator"]
+        ES1["ExternalSecret: gitea-secret"]
+        ES2["ExternalSecret: postgresql-secret\n(in postgresql dir)"]
+    end
+
+    subgraph sources["K8s Secrets (created by ESO)"]
         CM["ConfigMap\napp.ini"]
         PgSecret["postgresql-secret\nGITEA_DB_PASSWORD"]
         GSecret["gitea-secret\nGITEA_SECRET_KEY"]
     end
+
+    IS1 --> ES1 --> GSecret
+    IS2 --> ES2 --> PgSecret
 
     subgraph init["Init Container"]
         Copy["cp app.ini to PVC\nchown 1000:1000"]
