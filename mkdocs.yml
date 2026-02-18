@@ -1,0 +1,39 @@
+site_name: Homelab Docs
+site_url: https://holdennguyen.github.io/homelab/
+repo_url: https://github.com/holdennguyen/homelab
+repo_name: holdennguyen/homelab
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.highlight
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - admonition
+  - pymdownx.details
+
+nav:
+  - Architecture: architecture.md
+  - Networking: networking.md
+  - Bootstrap: bootstrap.md
+  - Secret Management: secret-management.md
