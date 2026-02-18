@@ -4,6 +4,7 @@ resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
+  - applications/kubernetes-dashboard-app.yaml
 patches:
   - target:
       kind: Service
