@@ -1,56 +1,151 @@
-# Homelab Repository
+# Homelab
 
-This repository houses the configuration, code, and tools for managing a personal homelab environment. The primary goal is to create a robust and automated platform for developing, deploying, and managing AI agents and related applications.
+A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- currently Gitea and PostgreSQL -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows.
 
 ## Architecture
 
-The homelab is built around a Kubernetes cluster, orchestrated with Argo CD for GitOps, and includes essential services like Gitea for Git management and PostgreSQL for data storage. The core application is `openclaw`, which serves as the primary framework or backend for AI agent development and deployment.
-
 ```mermaid
-graph TD
-    subgraph Homelab Infrastructure
-        K8s[Kubernetes Cluster]
-        ArgoCD[Argo CD] --> K8s
-        Gitea[Gitea Git Server] --> K8s
-        PostgreSQL[PostgreSQL DB] --> K8s
+flowchart TD
+    subgraph dev["Developer Workstation (Mac mini M4)"]
+        Git["Git CLI"]
     end
 
-    subgraph Core Application
-        Openclaw[Openclaw Framework/App]
-        Openclaw -- Runs on --> K8s
-        Openclaw -- Stores Data --> PostgreSQL
+    GitHub["GitHub\nholdennguyen/homelab"]
+
+    subgraph orb["OrbStack Kubernetes Cluster"]
+        subgraph argocdNs["argocd namespace"]
+            ArgoCD["Argo CD"]
+        end
+
+        subgraph giteaNs["gitea-system namespace"]
+            direction LR
+            GiteaPod["Gitea Pod\ngitea/gitea:1.22"]
+            PostgresPod["PostgreSQL Pod\npostgres:15"]
+            GiteaSvc["Gitea Service\n:3000, :22"]
+            PostgresSvc["PostgreSQL Service\n:5432"]
+            GiteaPVC["gitea-data PVC\n10Gi"]
+            PostgresPVC["postgresql-data PVC\n5Gi"]
+        end
+
+        Ingress["Ingress\ngitea.homelab.local"]
     end
 
-    subgraph AI Agents
-        Agents[Agent Development & Management] --> Openclaw
-        AgentConfigs[/agents/] --> Gitea
-    end
-
-    User[User] --> CLI(Gemini CLI)
-    CLI --> K8s
-    CLI --> Agents
-    CLI -- Deploys/Manages --> Openclaw
-    CLI -- Manages --> AgentConfigs
+    Git -- "git push" --> GitHub
+    GitHub -- "poll & sync" --> ArgoCD
+    ArgoCD -- "manages" --> giteaNs
+    Ingress -- ":3000" --> GiteaSvc
+    GiteaSvc --> GiteaPod
+    GiteaPod -- "PASSWD from Secret" --> PostgresSvc
+    PostgresSvc --> PostgresPod
+    GiteaPod --- GiteaPVC
+    PostgresPod --- PostgresPVC
 ```
 
-## Key Components
+## Repository Structure
 
-*   **`openclaw`**: This directory contains the core `openclaw` framework or application. It includes `Dockerfile` and `docker-compose.yml` for containerization and local development, as well as `package.json` and TypeScript configurations for its Node.js-based development. This is expected to be deployed on the Kubernetes cluster.
-*   **`agents/`**: This directory is dedicated to the development and management of AI agents. It contains subdirectories for different agent types, each with `SKILL.md` files that likely define their capabilities and behaviors. Agent configurations are managed via Git, potentially hosted in Gitea.
-*   **`k8s/`**: This directory holds Kubernetes manifests and configurations for deploying and managing services within the homelab.
-    *   **`argocd/`**: Configurations for Argo CD, enabling GitOps-based continuous deployment.
-    *   **`gitea/`**: Configurations for Gitea, providing a self-hosted Git service.
-    *   **`postgresql/`**: Configurations for PostgreSQL, serving as the primary database for applications like `openclaw`.
-*   **`scripts/`**: This directory contains various utility scripts for automating tasks, building, testing, and managing the homelab environment.
-*   **`docs/`**: Contains documentation related to the project.
+```
+homelab/
+├── README.md
+├── agents/                        # AI agent skill definitions
+│   ├── root_rules.md              # Shared rules all agents follow
+│   ├── devops_sre_agent/          # Infrastructure & reliability
+│   ├── software_engineer_agent/   # Code development
+│   ├── qa_tester_agent/           # Testing & quality
+│   ├── product_manager_agent/     # Product planning
+│   ├── data_scientist_agent/      # Data analysis
+│   └── security_analyst_agent/    # Security operations
+├── k8s/                           # Kubernetes manifests (GitOps root)
+│   └── apps/
+│       ├── argocd/                # Argo CD + Application definitions
+│       ├── gitea/                 # Gitea git server manifests
+│       └── postgresql/            # PostgreSQL database manifests
+├── openclaw/                      # Core AI agent framework (submodule)
+└── skills/                        # Shared agent skill modules
+```
 
-## Homelab Plan
+## GitOps Flow
 
-The homelab is envisioned as a continuously evolving platform. Key future plans include:
+Every change follows the same path: commit to `main`, push to GitHub, Argo CD detects the change and syncs the cluster.
 
-1.  **Agent Expansion**: Developing and integrating more sophisticated AI agents for various tasks (e.g., data analysis, security monitoring, code generation).
-2.  **Scalability and Resilience**: Optimizing Kubernetes deployments for scalability and high availability.
-3.  **CI/CD Enhancement**: Further refining the GitOps workflow with Argo CD for seamless updates and deployments.
-4.  **Observability**: Implementing robust monitoring, logging, and tracing solutions for all components.
-5.  **Security Hardening**: Continuously improving the security posture of all deployed services.
-6.  **Tooling Integration**: Exploring and integrating new tools and technologies that can enhance agent capabilities or operational efficiency.
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant GH as GitHub (main)
+    participant Argo as Argo CD
+    participant K8s as Kubernetes
+
+    Dev->>GH: git push
+    loop Every ~3 minutes
+        Argo->>GH: Poll for changes
+    end
+    GH-->>Argo: New commit detected
+    Argo->>Argo: Render manifests (Kustomize)
+    Argo->>K8s: Apply diff
+    K8s-->>Argo: Resource status
+    Note over Argo: selfHeal=true reverts<br/>any manual kubectl changes
+```
+
+## Deployed Services
+
+| Service | Image | Namespace | Access | Status |
+|---------|-------|-----------|--------|--------|
+| Argo CD | upstream `stable` | `argocd` | `kubectl port-forward svc/argocd-server -n argocd 8080:443` | Healthy |
+| PostgreSQL | `postgres:15` | `gitea-system` | ClusterIP `postgresql:5432` | Healthy |
+| Gitea | `gitea/gitea:1.22` | `gitea-system` | Ingress `https://gitea.homelab.local` | Running |
+
+## Quick Start
+
+### Prerequisites
+
+- OrbStack with Kubernetes enabled
+- `kubectl` configured to the OrbStack cluster
+- Git push access to `github.com/holdennguyen/homelab`
+
+### Bootstrap Argo CD
+
+```bash
+kubectl apply -k k8s/apps/argocd
+
+# Get the initial admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+# Access the UI
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+Argo CD self-manages after the initial `kubectl apply`. It also deploys the PostgreSQL and Gitea Application definitions bundled in `k8s/apps/argocd/kustomization.yaml`.
+
+### Verify Deployment
+
+```bash
+# Check Argo CD applications
+kubectl get applications -n argocd
+
+# Check running pods
+kubectl get pods -n gitea-system
+
+# Test Gitea API
+kubectl exec -n gitea-system deploy/gitea -c gitea -- \
+  wget -qO- http://localhost:3000/api/v1/settings/api
+
+# Test PostgreSQL
+kubectl exec -n gitea-system deploy/postgresql -- \
+  psql -U gitea -d gitea -c '\dt'
+```
+
+## Component Documentation
+
+Each service has detailed documentation covering its configuration, integration points, and operational notes:
+
+- [Argo CD](k8s/apps/argocd/README.md) -- GitOps controller, Application definitions, sync policies
+- [PostgreSQL](k8s/apps/postgresql/README.md) -- Database configuration, pg_hba.conf, PGDATA layout, Secret management
+- [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, Ingress/TLS setup
+
+## Future Plans
+
+1. **Observability** -- Prometheus, Grafana, Loki for monitoring and logging
+2. **Secret Management** -- Sealed Secrets or External Secrets Operator to replace plaintext base64 Secrets
+3. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
+4. **Openclaw Deployment** -- Containerize and deploy the AI agent framework to the cluster
+5. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
+6. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning

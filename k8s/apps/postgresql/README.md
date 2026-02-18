@@ -1,65 +1,176 @@
-# PostgreSQL Deployment for Gitea on Kubernetes
+# PostgreSQL
 
-This directory contains the Kubernetes manifests for deploying a dedicated PostgreSQL database instance within your Kubernetes cluster, specifically configured to serve as the backend for the Gitea application. This setup follows GitOps principles, allowing for declarative management of the database infrastructure.
+Dedicated PostgreSQL 15 instance serving as the database backend for Gitea. Deployed in the `gitea-system` namespace alongside Gitea for direct service-to-service connectivity.
 
-## Overview
+## Architecture
 
-This PostgreSQL deployment provides a persistent and isolated database for Gitea. It includes a Persistent Volume Claim (PVC) for data storage, ensuring data persistence across pod restarts or redeployments. Sensitive information like database passwords are managed securely using Kubernetes Secrets.
+```mermaid
+flowchart TD
+    subgraph giteaNs["gitea-system namespace"]
+        subgraph pgDeploy["PostgreSQL Deployment"]
+            PgContainer["postgres:15 container"]
+        end
 
-### Key Concepts
+        PgSvc["postgresql Service\nClusterIP :5432"]
+        PgSecret["postgresql-secret\n(POSTGRES_USER, POSTGRES_PASSWORD,\nPOSTGRES_DB, GITEA_DB_PASSWORD)"]
+        PgHBA["postgresql-hba-config\nConfigMap"]
+        PgPVC["postgresql-data PVC\n5Gi RWO"]
 
-*   **PersistentVolumeClaim (PVC):** A request for storage by a user. Kubernetes automatically provisions a PersistentVolume (PV) to satisfy this claim, providing durable storage for the database data. This means your Gitea data (repositories, users, etc.) will not be lost if the PostgreSQL pod is rescheduled or deleted.
-*   **Secret:** Kubernetes object used to store sensitive information, such as passwords, API keys, and other credentials. Secrets are stored base64 encoded by default. For this setup, we store the PostgreSQL superuser password and the Gitea database user password securely.
-*   **Deployment:** A Kubernetes resource that provides declarative updates for Pods and ReplicaSets. Here, it manages the PostgreSQL container, ensuring a specified number of replicas (typically one for a single-instance database) are running and handling updates.
-*   **Service:** An abstract way to expose an application running on a set of Pods as a network service. For PostgreSQL, a ClusterIP Service provides a stable internal IP address and DNS name (`postgresql.gitea-system.svc.cluster.local`) for Gitea to connect to, abstracting away the actual Pod IPs.
+        PgContainer -- "env vars from" --> PgSecret
+        PgContainer -- "mounts at\n/var/lib/postgresql/data" --> PgPVC
+        PgContainer -- "mounts at\n/etc/postgresql/pg_hba.conf" --> PgHBA
+        PgSvc -- ":5432" --> PgContainer
+    end
 
-## Components
+    GiteaPod["Gitea Pod"] -- "postgresql:5432\nuser=gitea" --> PgSvc
+```
 
--   `namespace.yaml`: References the `gitea-system` namespace, ensuring PostgreSQL resources are co-located with Gitea for easier management and network access.
--   `pvc.yaml`: Defines the `postgresql-data` Persistent Volume Claim, requesting storage for the database.
--   `secret.yaml`: Stores the `POSTGRES_PASSWORD` (for the `postgres` superuser), `POSTGRES_USER`, `POSTGRES_DB`, and `GITEA_DB_PASSWORD` (for the Gitea application's database user). **Ensure passwords are strong and randomly generated.**
--   `deployment.yaml`: Configures the PostgreSQL server Deployment. It uses the `postgres:15` Docker image, mounts the PVC, and injects environment variables from the `secret.yaml` for database configuration.
--   `service.yaml`: Creates a ClusterIP Service named `postgresql`, exposing port 5432 for internal cluster communication.
--   `kustomization.yaml`: Orchestrates the deployment of all these PostgreSQL resources using Kustomize.
+## Directory Contents
+
+| File | Purpose |
+|------|---------|
+| `kustomization.yaml` | Lists all resources for Kustomize/Argo CD rendering |
+| `namespace.yaml` | Creates the `gitea-system` namespace (owns it via `CreateNamespace=true` in the Argo CD Application) |
+| `pvc.yaml` | 5Gi `ReadWriteOnce` PersistentVolumeClaim for database files |
+| `secret.yaml` | Credentials for PostgreSQL superuser and Gitea database access |
+| `postgresql-hba-config.yaml` | Custom `pg_hba.conf` controlling client authentication |
+| `deployment.yaml` | PostgreSQL Deployment with volume mounts and resource limits |
+| `service.yaml` | ClusterIP Service exposing port 5432 |
+
+## Configuration Details
+
+### Data Directory (PGDATA)
+
+The PVC is mounted at `/var/lib/postgresql/data`. To avoid issues with `lost+found` directories created by some filesystem provisioners, `PGDATA` is set to a subdirectory:
+
+```
+PGDATA=/var/lib/postgresql/data/pgdata
+```
+
+The directory layout inside the container:
+
+```
+/var/lib/postgresql/data/         <-- PVC mount
+└── pgdata/                       <-- PGDATA (actual database files)
+    ├── base/
+    ├── global/
+    ├── pg_wal/
+    └── ...
+```
+
+### Host-Based Authentication (pg_hba.conf)
+
+A custom `pg_hba.conf` is provided via the `postgresql-hba-config` ConfigMap, mounted at `/etc/postgresql/pg_hba.conf` (outside the data directory). The postgres process is told to use it via the container argument:
+
+```yaml
+args: ["-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+```
+
+The authentication rules:
+
+```
+# TYPE  DATABASE  USER  ADDRESS      METHOD
+local   all       all                trust    # Unix socket (used during initdb)
+host    all       all   127.0.0.1/32 md5      # Loopback TCP
+host    all       all   0.0.0.0/0    md5      # All TCP connections (pod network)
+```
+
+The `local trust` rule is required because the `postgres:15` Docker image's entrypoint script uses Unix socket connections to create the database and user during first initialization. Without it, `initdb` fails with `no pg_hba.conf entry for host "[local]"`.
+
+```mermaid
+sequenceDiagram
+    participant Entry as docker-entrypoint.sh
+    participant PG as PostgreSQL
+    participant HBA as pg_hba.conf
+
+    Entry->>PG: Run initdb
+    PG->>PG: Create data directory
+    Entry->>PG: Start temp server
+    Entry->>PG: CREATE USER gitea (via Unix socket)
+    PG->>HBA: Check "local all all trust"
+    HBA-->>PG: Allowed
+    Entry->>PG: CREATE DATABASE gitea (via Unix socket)
+    PG->>HBA: Check "local all all trust"
+    HBA-->>PG: Allowed
+    Entry->>PG: Stop temp server
+    Entry->>PG: Start production server
+    Note over PG: Now accepts TCP connections<br/>from Gitea via "host md5" rules
+```
+
+### Why pg_hba.conf is Mounted Outside the Data Directory
+
+Mounting the ConfigMap inside `/var/lib/postgresql/data/` (the PVC) would cause a conflict: the PVC volume mount owns that directory, and a subPath ConfigMap mount inside it creates a race condition with `initdb` which also writes `pg_hba.conf` there. Mounting to `/etc/postgresql/` avoids this entirely.
+
+### Secret Management
+
+The `postgresql-secret` contains four base64-encoded values:
+
+| Key | Value | Used By |
+|-----|-------|---------|
+| `POSTGRES_USER` | `gitea` | PostgreSQL init (creates this as the superuser) |
+| `POSTGRES_PASSWORD` | `giteapassword` | PostgreSQL init (sets the superuser password) |
+| `POSTGRES_DB` | `gitea` | PostgreSQL init (creates this database) |
+| `GITEA_DB_PASSWORD` | `giteapassword` | Gitea Deployment (injected as `GITEA__database__PASSWD` env var) |
+
+`POSTGRES_PASSWORD` and `GITEA_DB_PASSWORD` must match because `POSTGRES_USER=gitea` makes `gitea` the PostgreSQL superuser, and Gitea connects as that same user. If they differ, Gitea will fail with `password authentication failed`.
+
+**Important:** These are development-only values. For production, generate strong random passwords and consider using Sealed Secrets or an External Secrets Operator.
+
+### Changing the Password
+
+Because PostgreSQL stores the password hash in its data files during `initdb`, changing the Secret alone does not update the running database. To change the password:
+
+1. Update the Secret values in `secret.yaml`
+2. Delete the PostgreSQL PVC to force reinitialization:
+
+```bash
+kubectl scale deployment postgresql -n gitea-system --replicas=0
+kubectl delete pvc postgresql-data -n gitea-system
+kubectl scale deployment postgresql -n gitea-system --replicas=1
+```
+
+This destroys all database data. For non-destructive password changes, exec into the pod and run `ALTER USER`.
+
+### Resource Limits
+
+| Resource | Request | Limit |
+|----------|---------|-------|
+| CPU | 100m | 500m |
+| Memory | 256Mi | 512Mi |
 
 ## Integration with Gitea
 
-Gitea is configured to connect to this PostgreSQL instance using its Service DNS name (`postgresql.gitea-system.svc.cluster.local`) and the credentials stored in the `postgresql-secret`. The `GITEA_DB_PASSWORD` is specifically used by the Gitea application to access its database.
+Gitea connects to PostgreSQL using the Kubernetes Service DNS name:
 
-## Deployment using GitOps
+```
+Host: postgresql.gitea-system.svc.cluster.local:5432
+```
 
-Once your Argo CD (or chosen GitOps tool) is configured to monitor this repository, changes pushed to this `k8s/apps/postgresql` directory will automatically trigger the deployment or update of the PostgreSQL instance in your Kubernetes cluster.
-
-## Example Diagram: Gitea and PostgreSQL Interaction
+In Gitea's `app.ini`, this is shortened to `postgresql:5432` since both pods are in the same namespace. The connection flow:
 
 ```mermaid
-graph TD
-    subgraph Kubernetes Cluster
-        subgraph gitea-system Namespace
-            Gitea_Pod(Gitea Pod)
-            Gitea_Svc(Gitea Service)
-            PostgreSQL_Pod(PostgreSQL Pod)
-            PostgreSQL_Svc(PostgreSQL Service)
-            Gitea_PVC(Gitea Data PVC)
-            PostgreSQL_PVC(PostgreSQL Data PVC)
-            Gitea_Secret(Gitea Secret)
-            PostgreSQL_Secret(PostgreSQL Secret)
-            Gitea_ConfigMap(Gitea ConfigMap)
-        end
+flowchart LR
+    Gitea["Gitea Pod"] -- "postgresql:5432" --> Svc["postgresql Service\nClusterIP"]
+    Svc -- "selector match" --> Pod["PostgreSQL Pod\n:5432"]
+    Gitea -. "GITEA__database__PASSWD\nfrom postgresql-secret" .-> Secret["postgresql-secret"]
+```
 
-        Gitea_Pod -- Mounts --> Gitea_PVC
-        PostgreSQL_Pod -- Mounts --> PostgreSQL_PVC
+## Operational Commands
 
-        Gitea_Pod -- Uses Env Vars from --> Gitea_Secret
-        Gitea_Pod -- Uses Config from --> Gitea_ConfigMap
+```bash
+# Check pod status
+kubectl get pods -n gitea-system -l app.kubernetes.io/name=postgresql
 
-        PostgreSQL_Pod -- Uses Env Vars from --> PostgreSQL_Secret
+# View logs
+kubectl logs -n gitea-system deploy/postgresql
 
-        Gitea_Pod -- Connects to --> PostgreSQL_Svc
-        PostgreSQL_Svc -- Routes to --> PostgreSQL_Pod
+# Connect to psql
+kubectl exec -n gitea-system deploy/postgresql -- psql -U gitea -d gitea
 
-        User(External User) -- HTTPS --> Ingress(Kubernetes Ingress)
-        Ingress -- Routes to --> Gitea_Svc
-        Gitea_Svc -- Routes to --> Gitea_Pod
-    end
+# List tables
+kubectl exec -n gitea-system deploy/postgresql -- psql -U gitea -d gitea -c '\dt'
+
+# Check database size
+kubectl exec -n gitea-system deploy/postgresql -- psql -U gitea -d gitea \
+  -c "SELECT pg_size_pretty(pg_database_size('gitea'));"
 ```
