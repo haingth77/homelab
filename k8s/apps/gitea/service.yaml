@@ -7,14 +7,16 @@ metadata:
     app.kubernetes.io/name: gitea
     app.kubernetes.io/instance: gitea
 spec:
-  type: ClusterIP # Use ClusterIP for internal access, or NodePort/LoadBalancer for external
+  type: NodePort
   ports:
     - port: 3000
       targetPort: http
+      nodePort: 30300
       protocol: TCP
       name: http
     - port: 22
       targetPort: ssh
+      nodePort: 30022
       protocol: TCP
       name: ssh
   selector:

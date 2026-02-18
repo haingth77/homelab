@@ -22,10 +22,10 @@ data:
     [server]
     HTTP_ADDR = 0.0.0.0
     HTTP_PORT = 3000
-    ROOT_URL = https://gitea.homelab.local/
+    ROOT_URL = https://holdens-mac-mini.tail0f8121.ts.net/
     DISABLE_SSH = false
     START_SSH_SERVER = false
-    SSH_DOMAIN = gitea.homelab.local
+    SSH_DOMAIN = holdens-mac-mini.tail0f8121.ts.net
     SSH_PORT = 22
     SSH_LISTEN_PORT = 22
     LFS_START_SERVER = true
