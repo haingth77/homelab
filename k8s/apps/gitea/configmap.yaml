@@ -15,7 +15,6 @@ data:
     DB_TYPE = postgres
     HOST = postgresql:5432
     USER = gitea
-    PASSWORD = "$(GITEA_DB_PASSWORD)"
     NAME = gitea
     SCHEMA = public
     SSL_MODE = disable
@@ -35,7 +34,7 @@ data:
     
     [security]
     INSTALL_LOCK = true
-    SECRET_KEY = "$(GITEA_SECRET_KEY)" # Placeholder: should be generated and put in a Secret
+    ; SECRET_KEY is injected via GITEA__security__SECRET_KEY env var from gitea-secret
     
     [session]
     PROVIDER = File

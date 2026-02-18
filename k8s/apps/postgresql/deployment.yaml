@@ -20,8 +20,11 @@ spec:
     spec:
       containers:
         - name: postgresql
-          image: postgres:15 # Using a specific version
+          image: postgres:15
+          args: ["-c", "hba_file=/etc/postgresql/pg_hba.conf"]
           env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -43,6 +46,9 @@ spec:
           volumeMounts:
             - name: postgresql-data
               mountPath: /var/lib/postgresql/data
+            - name: postgresql-hba
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
           resources:
             requests:
               cpu: 100m
@@ -54,3 +60,6 @@ spec:
         - name: postgresql-data
           persistentVolumeClaim:
             claimName: postgresql-data
+        - name: postgresql-hba
+          configMap:
+            name: postgresql-hba-config

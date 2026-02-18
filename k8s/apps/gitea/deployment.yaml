@@ -20,36 +20,18 @@ spec:
     spec:
       containers:
         - name: gitea
-          image: gitea/gitea:latest # Use a specific version in production (e.g., 1.21.11)
+          image: gitea/gitea:1.22
           env:
-            - name: GITEA__database__DB_TYPE
-              value: postgres
-            - name: GITEA__database__HOST
-              value: postgresql:5432 # Service name and port for PostgreSQL
-            - name: GITEA__database__NAME
-              value: gitea
-            - name: GITEA__database__USER
-              value: gitea
-            - name: GITEA__database__PASSWORD
+            - name: GITEA__database__PASSWD
               valueFrom:
                 secretKeyRef:
                   name: postgresql-secret
                   key: GITEA_DB_PASSWORD
-            - name: GITEA__database__SSL_MODE
-              value: disable
-            - name: GITEA__server__ROOT_URL
-              value: http://gitea.gitea-system.svc.cluster.local:3000/ # Internal URL
-            - name: GITEA__server__SSH_DOMAIN
-              value: localhost # Adjust if exposing SSH
-            - name: GITEA__server__SSH_PORT
-              value: "22"
-            - name: GITEA__server__HTTP_PORT
-              value: "3000"
-            - name: GITEA__server__LFS_START_SERVER
-              value: "true"
-            - name: GITEA__security__INSTALL_LOCK
-              value: "true" # Prevent re-installation via web UI
-            # Add other necessary Gitea configurations here, often via ConfigMap
+            - name: GITEA__security__SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-secret
+                  key: GITEA_SECRET_KEY
           ports:
             - name: http
               containerPort: 3000
