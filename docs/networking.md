@@ -28,6 +28,7 @@ flowchart TD
         subgraph ts["Tailscale Serve"]
             TLS443["HTTPS :443\nauto Let's Encrypt cert"]
             TLS8443["HTTPS :8443\nauto Let's Encrypt cert"]
+            TLS8444["HTTPS :8444\nauto Let's Encrypt cert"]
         end
 
         subgraph orbstack["OrbStack Kubernetes"]
@@ -38,14 +39,19 @@ flowchart TD
                 GiteaSvc["gitea\nNodePort 30300/30022"]
                 PgSvc["postgresql\nClusterIP 5432"]
             end
+            subgraph dashNs["kubernetes-dashboard namespace"]
+                DashSvc["kubernetes-dashboard\nNodePort 30444"]
+            end
         end
 
         TLS443 -- "http://localhost:30300" --> GiteaSvc
         TLS8443 -- "https+insecure://localhost:30443" --> ArgoCDSvc
+        TLS8444 -- "https+insecure://localhost:30444" --> DashSvc
     end
 
     iPhone -- "https://holdens-mac-mini\n.story-larch.ts.net" --> TLS443
     iPad -- "https://holdens-mac-mini\n.story-larch.ts.net:8443" --> TLS8443
+    iPhone -- ":8444" --> TLS8444
 ```
 
 ## Request Path (Detailed)
@@ -127,6 +133,7 @@ patches:
 | Gitea SSH | 22 | 30022 | `ssh://localhost:30022` |
 | ArgoCD HTTP | 80 (-> 8080) | 30080 | `http://localhost:30080` |
 | ArgoCD HTTPS | 443 (-> 8080) | 30443 | `https://localhost:30443` |
+| K8s Dashboard | 8443 | 30444 | `https://localhost:30444` |
 | PostgreSQL | 5432 | -- | ClusterIP only (no external access) |
 
 ## Layer 2: Tailscale Serve
@@ -141,6 +148,9 @@ tailscale serve --bg http://localhost:30300
 
 # ArgoCD -- custom HTTPS port (8443)
 tailscale serve --bg --https 8443 https+insecure://localhost:30443
+
+# Kubernetes Dashboard -- custom HTTPS port (8444)
+tailscale serve --bg --https 8444 https+insecure://localhost:30444
 ```
 
 The `--bg` flag runs the proxy as a persistent background service that survives terminal sessions. The `https+insecure://` prefix tells Tailscale to connect to ArgoCD's self-signed HTTPS endpoint without verifying its certificate (since TLS is re-terminated by Tailscale with a valid cert).
@@ -161,12 +171,14 @@ flowchart LR
     subgraph k8s["Kubernetes"]
         Gitea["Gitea :3000\nplain HTTP"]
         ArgoCD["ArgoCD :8080\nself-signed HTTPS"]
+        Dashboard["Dashboard :8443\nself-signed HTTPS"]
     end
 
     Browser -- "TLS 1.3\nvalid cert" --> Cert
     Cert --> Proxy
     Proxy -- "plain HTTP" --> Gitea
     Proxy -- "HTTPS\nskip cert verify" --> ArgoCD
+    Proxy -- "HTTPS\nskip cert verify" --> Dashboard
 ```
 
 Tailscale automatically provisions and renews Let's Encrypt certificates for the `*.ts.net` domain. No manual certificate management, no cert-manager, no self-signed certs.
@@ -181,6 +193,9 @@ https://holdens-mac-mini.story-larch.ts.net (tailnet only)
 
 https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
 |-- / proxy https+insecure://localhost:30443
+
+https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
+|-- / proxy https+insecure://localhost:30444
 ```
 
 ### Manage Serve
@@ -191,6 +206,9 @@ tailscale serve --https=443 off
 
 # Stop ArgoCD proxy
 tailscale serve --https=8443 off
+
+# Stop Dashboard proxy
+tailscale serve --https=8444 off
 
 # Reset all serve config
 tailscale serve reset
@@ -214,6 +232,7 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 |---------|-----|------|
 | Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) |
 | ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
+| K8s Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
 
 ### Tailscale Serve vs Funnel
 
@@ -229,7 +248,7 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 | Approach | Pros | Cons |
 |----------|------|------|
 | **Tailscale Serve + NodePort** (current) | Zero config TLS, no extra pods, works on headless Mac, private by default | Requires Tailscale on all client devices |
-| nginx-ingress / Traefik | Standard K8s pattern, works with any client | Extra pods, manual TLS (cert-manager), DNS setup, overkill for 2 services |
+| nginx-ingress / Traefik | Standard K8s pattern, works with any client | Extra pods, manual TLS (cert-manager), DNS setup, overkill for 3 services |
 | `kubectl port-forward` | No config needed | Manual, dies when terminal closes, no TLS, single user |
 | LoadBalancer (MetalLB) | Standard K8s pattern | Complex setup for single-node, still need TLS and DNS |
 
@@ -258,7 +277,7 @@ flowchart TD
 
     subgraph tailnet["Tailscale Tailnet (story-larch)"]
         subgraph mac["Mac mini M4\n100.77.144.4"]
-            TS["tailscale serve\n:443, :8443"]
+            TS["tailscale serve\n:443, :8443, :8444"]
 
             subgraph orb["OrbStack Kubernetes"]
                 subgraph argocd["argocd ns"]
@@ -271,10 +290,14 @@ flowchart TD
                     PgSvc["postgresql :5432"]
                     PgPod["PostgreSQL"]
                 end
+                subgraph dash["kubernetes-dashboard ns"]
+                    DashSvc["kubernetes-dashboard\nNodePort 30444"]
+                end
             end
 
             TS -- "localhost:30300" --> GiteaSvc
             TS -- "localhost:30443" --> ArgoSvc
+            TS -- "localhost:30444" --> DashSvc
             GiteaSvc --> GiteaPod
             GiteaPod --> PgSvc
             PgSvc --> PgPod

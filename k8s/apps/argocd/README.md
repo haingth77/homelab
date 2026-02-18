@@ -12,6 +12,7 @@ flowchart TD
         ArgoManifests["k8s/apps/argocd/"]
         PgManifests["k8s/apps/postgresql/"]
         GiteaManifests["k8s/apps/gitea/"]
+        DashManifests["k8s/apps/kubernetes-dashboard/"]
     end
 
     subgraph cluster["Kubernetes Cluster"]
@@ -23,13 +24,16 @@ flowchart TD
 
         PostgresqlApp["Application: postgresql"]
         GiteaApp["Application: gitea"]
+        DashApp["Application: kubernetes-dashboard"]
     end
 
     RepoServer -- "clone & render" --> repo
     AppController -- "diff & sync" --> PostgresqlApp
     AppController -- "diff & sync" --> GiteaApp
+    AppController -- "diff & sync" --> DashApp
     PostgresqlApp -. "source" .-> PgManifests
     GiteaApp -. "source" .-> GiteaManifests
+    DashApp -. "source" .-> DashManifests
     ArgoManifests -. "self-manages" .-> argocdNs
 ```
 
@@ -37,9 +41,10 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `kustomization.yaml` | Pulls upstream Argo CD `install.yaml` from the `stable` branch and includes both Application definitions |
+| `kustomization.yaml` | Pulls upstream Argo CD `install.yaml` from the `stable` branch and includes all Application definitions |
 | `applications/postgresql-app.yaml` | Application CR that syncs `k8s/apps/postgresql` to the cluster |
 | `applications/gitea-app.yaml` | Application CR that syncs `k8s/apps/gitea` to the cluster |
+| `applications/kubernetes-dashboard-app.yaml` | Application CR that syncs `k8s/apps/kubernetes-dashboard` to the cluster |
 
 ## Kustomization
 

@@ -1,6 +1,6 @@
 # Homelab
 
-A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- currently Gitea and PostgreSQL -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows.
+A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Gitea, PostgreSQL, and Kubernetes Dashboard -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
 
 ## Architecture
 
@@ -28,13 +28,19 @@ flowchart TD
             GiteaSvc["Gitea Service\nNodePort :30300/:30022"]
             PostgresSvc["PostgreSQL Service\n:5432"]
         end
+
+        subgraph dashNs["kubernetes-dashboard namespace"]
+            DashPod["Dashboard Pod\nv2.7.0"]
+        end
     end
 
     Git -- "git push" --> GitHub
     GitHub -- "poll & sync" --> ArgoCD
     ArgoCD -- "manages" --> giteaNs
+    ArgoCD -- "manages" --> dashNs
     TServe -- ":443 -> localhost:30300" --> GiteaSvc
     TServe -- ":8443 -> localhost:30443" --> ArgoCD
+    TServe -- ":8444 -> localhost:30444" --> DashPod
     GiteaSvc --> GiteaPod
     GiteaPod -- "PASSWD from Secret" --> PostgresSvc
     PostgresSvc --> PostgresPod
@@ -53,10 +59,13 @@ homelab/
 │   ├── product_manager_agent/     # Product planning
 │   ├── data_scientist_agent/      # Data analysis
 │   └── security_analyst_agent/    # Security operations
+├── docs/                          # Architecture & networking docs
+│   └── networking.md              # Tailscale + NodePort deep dive
 ├── k8s/                           # Kubernetes manifests (GitOps root)
 │   └── apps/
 │       ├── argocd/                # Argo CD + Application definitions
 │       ├── gitea/                 # Gitea git server manifests
+│       ├── kubernetes-dashboard/  # Cluster monitoring dashboard
 │       └── postgresql/            # PostgreSQL database manifests
 ├── openclaw/                      # Core AI agent framework (submodule)
 └── skills/                        # Shared agent skill modules
@@ -89,8 +98,9 @@ sequenceDiagram
 | Service | Image | Namespace | Access | Status |
 |---------|-------|-----------|--------|--------|
 | Argo CD | upstream `stable` | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443` | Healthy |
+| Gitea | `gitea/gitea:1.22` | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` | Healthy |
 | PostgreSQL | `postgres:15` | `gitea-system` | ClusterIP `postgresql:5432` (internal only) | Healthy |
-| Gitea | `gitea/gitea:1.22` | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` | Running |
+| K8s Dashboard | `v2.7.0` | `kubernetes-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8444` | Healthy |
 
 ## Quick Start
 
@@ -123,14 +133,18 @@ tailscale serve --bg http://localhost:30300
 # ArgoCD on port 8443
 tailscale serve --bg --https 8443 https+insecure://localhost:30443
 
+# Kubernetes Dashboard on port 8444
+tailscale serve --bg --https 8444 https+insecure://localhost:30444
+
 # Verify
 tailscale serve status
 ```
 
-Access URLs (from any Tailscale device):
+Access URLs (from any Tailscale device -- iPhone, iPad, Mac, etc.):
 
 - Gitea: `https://holdens-mac-mini.story-larch.ts.net`
 - ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
+- K8s Dashboard: `https://holdens-mac-mini.story-larch.ts.net:8444`
 
 ### Verify Deployment
 
@@ -156,8 +170,9 @@ Each service has detailed documentation covering its configuration, integration 
 
 - [Networking](docs/networking.md) -- Tailscale Serve + NodePort architecture, request path, TLS, port map, troubleshooting
 - [Argo CD](k8s/apps/argocd/README.md) -- GitOps controller, Application definitions, sync policies
-- [PostgreSQL](k8s/apps/postgresql/README.md) -- Database configuration, pg_hba.conf, PGDATA layout, Secret management
 - [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, service configuration
+- [PostgreSQL](k8s/apps/postgresql/README.md) -- Database configuration, pg_hba.conf, PGDATA layout, Secret management
+- [Kubernetes Dashboard](k8s/apps/kubernetes-dashboard/README.md) -- Remote cluster monitoring, authentication, mobile access
 
 ## Future Plans
 
