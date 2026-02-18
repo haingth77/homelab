@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw
+  namespace: openclaw
+  labels:
+    app.kubernetes.io/name: openclaw
+    app.kubernetes.io/instance: openclaw
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openclaw
+      app.kubernetes.io/instance: openclaw
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openclaw
+        app.kubernetes.io/instance: openclaw
+    spec:
+      containers:
+        - name: openclaw
+          image: openclaw:latest
+          imagePullPolicy: Never
+          command:
+            - node
+            - dist/index.js
+            - gateway
+            - --allow-unconfigured
+            - --port
+            - "3000"
+            - --bind
+            - lan
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: OPENCLAW_STATE_DIR
+              value: /data
+            - name: OPENCLAW_PREFER_PNPM
+              value: "1"
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=1536"
+            - name: HOME
+              value: /home/node
+            - name: TERM
+              value: xterm-256color
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secret
+                  key: OPENCLAW_GATEWAY_TOKEN
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secret
+                  key: GEMINI_API_KEY
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: openclaw-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: openclaw-data
+          persistentVolumeClaim:
+            claimName: openclaw-data

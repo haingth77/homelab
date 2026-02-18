@@ -1,6 +1,6 @@
 # Homelab
 
-A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Gitea, PostgreSQL, and Kubernetes Dashboard -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
+A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Gitea, PostgreSQL, Kubernetes Dashboard, and OpenClaw AI gateway -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
 
 ## Architecture
 
@@ -41,6 +41,10 @@ flowchart TD
         subgraph dashNs["kubernetes-dashboard namespace"]
             DashPod["Dashboard Pod\nNodePort :30444"]
         end
+
+        subgraph openclawNs["openclaw namespace"]
+            OpenClawPod["OpenClaw Gateway\nNodePort :30789"]
+        end
     end
 
     TF -- "Helm release" --> ArgoCD
@@ -52,13 +56,16 @@ flowchart TD
     ArgoCD -- "App of Apps" --> esoNs
     ArgoCD -- "App of Apps" --> giteaNs
     ArgoCD -- "App of Apps" --> dashNs
+    ArgoCD -- "App of Apps" --> openclawNs
     ESO --> CSS
     CSS -- "ExternalSecret" --> GiteaPod
     CSS -- "ExternalSecret" --> PostgresPod
+    CSS -- "ExternalSecret" --> OpenClawPod
     TServe -- ":443 -> :30300" --> GiteaSvc
     TServe -- ":8443 -> :30080" --> ArgoCD
     TServe -- ":8444 -> :30444" --> DashPod
     TServe -- ":8445 -> :30445" --> InfisicalSvc
+    TServe -- ":8446 -> :30789" --> OpenClawPod
 ```
 
 ## Repository Structure
@@ -91,8 +98,10 @@ homelab/
 │       ├── infisical/             # Infisical deployment (Helm via ArgoCD App)
 │       ├── gitea/                 # Gitea manifests (ExternalSecret, no plain Secrets)
 │       ├── kubernetes-dashboard/  # Cluster monitoring dashboard
+│       ├── openclaw/              # OpenClaw AI gateway (locally built image)
 │       └── postgresql/            # PostgreSQL manifests (ExternalSecret, no plain Secrets)
-├── openclaw/                      # Core AI agent framework (submodule)
+├── openclaw/                      # OpenClaw source code (AI agent framework)
+├── scripts/                       # Helper scripts (image builds, etc.)
 └── skills/                        # Shared agent skill modules
 ```
 
@@ -128,6 +137,7 @@ sequenceDiagram
 | Gitea | Kustomize via ArgoCD | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` |
 | PostgreSQL | Kustomize via ArgoCD | `gitea-system` | ClusterIP `postgresql:5432` (internal only) |
 | K8s Dashboard | Kustomize via ArgoCD | `kubernetes-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
+| OpenClaw | Kustomize via ArgoCD | `openclaw` | `https://holdens-mac-mini.story-larch.ts.net:8446` |
 
 ## Quick Start
 
@@ -135,6 +145,7 @@ sequenceDiagram
 
 - OrbStack with Kubernetes enabled
 - `kubectl` and `terraform` (>= 1.5) installed
+- `docker` (provided by OrbStack) for building the OpenClaw image
 - Git push access to `github.com/holdennguyen/homelab`
 - Tailscale installed with Serve enabled on the tailnet
 
@@ -176,6 +187,8 @@ Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the
 | `POSTGRES_DB` | `gitea` |
 | `GITEA_DB_PASSWORD` | Same as `POSTGRES_PASSWORD` |
 | `GITEA_SECRET_KEY` | Random base64 string (`openssl rand -base64 32`) |
+| `OPENCLAW_GATEWAY_TOKEN` | Random hex string (`openssl rand -hex 32`) |
+| `GEMINI_API_KEY` | Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
 Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), grant it **Member** access to the `homelab` project, update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to update the credential. See [docs/bootstrap.md](docs/bootstrap.md) for the full step-by-step.
 
@@ -188,6 +201,7 @@ tailscale serve --bg http://localhost:30300                       # Gitea
 tailscale serve --bg --https 8443 http://localhost:30080          # ArgoCD
 tailscale serve --bg --https 8444 https+insecure://localhost:30444 # K8s Dashboard
 tailscale serve --bg --https 8445 http://localhost:30445          # Infisical
+tailscale serve --bg --https 8446 http://localhost:30789          # OpenClaw
 
 tailscale serve status
 ```
@@ -198,6 +212,7 @@ Access URLs (any Tailscale device):
 - ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
 - K8s Dashboard: `https://holdens-mac-mini.story-larch.ts.net:8444`
 - Infisical: `https://holdens-mac-mini.story-larch.ts.net:8445`
+- OpenClaw: `https://holdens-mac-mini.story-larch.ts.net:8446`
 
 ### Verify Deployment
 
@@ -211,6 +226,7 @@ kubectl get externalsecret -n gitea-system
 # Check running pods
 kubectl get pods -n gitea-system
 kubectl get pods -n infisical
+kubectl get pods -n openclaw
 ```
 
 ## Documentation
@@ -228,11 +244,12 @@ kubectl get pods -n infisical
 | [k8s/apps/gitea/README.md](k8s/apps/gitea/README.md) | Config seeding via init container, env var overrides, ExternalSecret integration |
 | [k8s/apps/postgresql/README.md](k8s/apps/postgresql/README.md) | Database configuration, pg_hba.conf, PGDATA layout, password management |
 | [k8s/apps/kubernetes-dashboard/README.md](k8s/apps/kubernetes-dashboard/README.md) | Remote cluster monitoring, authentication, mobile access |
+| [docs/openclaw.md](docs/openclaw.md) | OpenClaw AI gateway deployment, image builds, secrets, operations |
+| [k8s/apps/openclaw/README.md](k8s/apps/openclaw/README.md) | OpenClaw k8s manifests, updating, troubleshooting |
 
 ## Future Plans
 
 1. **Observability** -- Prometheus, Grafana, Loki for monitoring and logging
 2. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
-3. **Openclaw Deployment** -- Containerize and deploy the AI agent framework to the cluster
-4. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
-5. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning
+3. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
+4. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning

@@ -49,3 +49,4 @@ nav:
       - External Secrets: external-secrets.md
       - Infisical: infisical.md
       - Kubernetes Dashboard: kubernetes-dashboard.md
+      - OpenClaw: openclaw.md

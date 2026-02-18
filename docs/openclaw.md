@@ -1,0 +1,249 @@
+# OpenClaw
+
+OpenClaw is a multi-channel AI gateway that serves as the agent orchestration layer for the homelab. It connects to multiple AI model providers (Anthropic, OpenAI, Gemini, etc.) and exposes a unified gateway API for AI agent workflows running on the Mac mini.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph tailnet["Tailscale Network"]
+        Clients["Devices on tailnet\niPhone, iPad, Mac"]
+        TServe["tailscale serve\nHTTPS :8446 → localhost:30789"]
+    end
+
+    subgraph orb["OrbStack Kubernetes Cluster"]
+        subgraph openclawNs["openclaw namespace"]
+            Svc["Service\nNodePort :30789"]
+            Deploy["OpenClaw Gateway\nPort :3000"]
+            PVC["PVC: openclaw-data\n5Gi"]
+            ES["ExternalSecret:\nopenclaw-secret"]
+            K8sSecret["K8s Secret:\nopenclaw-secret"]
+        end
+
+        subgraph esoNs["external-secrets namespace"]
+            CSS["ClusterSecretStore:\ninfisical"]
+        end
+    end
+
+    subgraph infisical["Infisical (homelab / prod)"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY"]
+    end
+
+    subgraph providers["AI Model Providers"]
+        Gemini["Google Gemini API"]
+    end
+
+    Clients -- "WireGuard" --> TServe
+    TServe --> Svc
+    Svc --> Deploy
+    Deploy --> PVC
+    ES -- "secretStoreRef" --> CSS
+    CSS -- "Universal Auth" --> InfisicalSecrets
+    InfisicalSecrets -- "creates" --> K8sSecret
+    K8sSecret -- "env vars" --> Deploy
+    Deploy --> Gemini
+```
+
+## How It Fits in the Homelab
+
+OpenClaw runs as a standard Kustomize application managed by ArgoCD, following the same App of Apps pattern as every other service. Its secrets flow through the Infisical → ESO → K8s Secret pipeline.
+
+```mermaid
+flowchart LR
+    subgraph argocd["ArgoCD (App of Apps)"]
+        RootApp["argocd-apps"]
+    end
+
+    subgraph apps["Child Applications"]
+        ESO["external-secrets"]
+        PG["postgresql"]
+        Gitea["gitea"]
+        Dash["kubernetes-dashboard"]
+        OC["openclaw"]
+    end
+
+    RootApp --> ESO
+    RootApp --> PG
+    RootApp --> Gitea
+    RootApp --> Dash
+    RootApp --> OC
+```
+
+## Deployment
+
+### Prerequisites
+
+- OpenClaw Docker image built locally (see [Build the Image](#build-the-image))
+- Secrets added to Infisical (see [Secrets](#secrets))
+
+### Build the Image
+
+OpenClaw uses a locally built Docker image. OrbStack's Kubernetes shares the host Docker daemon, so locally built images are immediately available with `imagePullPolicy: Never`.
+
+```bash
+./scripts/build-openclaw.sh
+```
+
+This builds the image as `openclaw:latest` from the `openclaw/` directory. To use a custom tag:
+
+```bash
+./scripts/build-openclaw.sh openclaw:v2026.2.16
+```
+
+If using a custom tag, update `image:` in `k8s/apps/openclaw/deployment.yaml` to match.
+
+### Secrets
+
+Add the following secrets to Infisical under **homelab / prod**:
+
+| Infisical Key | How to Generate | Required |
+|---|---|---|
+| `OPENCLAW_GATEWAY_TOKEN` | `openssl rand -hex 32` | Yes |
+| `GEMINI_API_KEY` | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | At least one provider |
+
+After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
+
+```bash
+kubectl annotate externalsecret openclaw-secret -n openclaw \
+  force-sync=$(date +%s) --overwrite
+```
+
+### Adding More Providers or Channels
+
+To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_BOT_TOKEN`):
+
+1. Add the key to Infisical under `homelab / prod`
+2. Add a new entry to `k8s/apps/openclaw/external-secret.yaml`:
+
+```yaml
+    - secretKey: ANTHROPIC_API_KEY
+      remoteRef:
+        key: ANTHROPIC_API_KEY
+```
+
+3. Add a corresponding `env` entry to `k8s/apps/openclaw/deployment.yaml`:
+
+```yaml
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secret
+                  key: ANTHROPIC_API_KEY
+```
+
+4. Push to `main` — ArgoCD syncs the change automatically.
+
+### Deploy
+
+Once the image is built and secrets are in Infisical, push the k8s manifests to `main`. ArgoCD detects the new Application CR and deploys within ~3 minutes.
+
+```bash
+# Verify the ArgoCD application
+kubectl get application openclaw -n argocd
+
+# Watch pod come up
+kubectl get pods -n openclaw -w
+
+# Check ExternalSecret resolved
+kubectl get externalsecret -n openclaw
+```
+
+### Expose via Tailscale
+
+Run once on the Mac mini (persists across reboots):
+
+```bash
+tailscale serve --bg --https 8446 http://localhost:30789
+```
+
+Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8446`
+
+## Networking
+
+```mermaid
+flowchart LR
+    Browser["Browser / Agent Client"]
+    TS["Tailscale Serve\nHTTPS :8446\nLet's Encrypt cert"]
+    NP["NodePort :30789\nlocalhost"]
+    Pod["OpenClaw Pod\n:3000"]
+
+    Browser -- "WireGuard\nhttps://holdens-mac-mini\n.story-larch.ts.net:8446" --> TS
+    TS -- "http://localhost:30789" --> NP
+    NP --> Pod
+```
+
+| Layer | Port | Protocol |
+|---|---|---|
+| Container | 3000 | HTTP |
+| NodePort | 30789 | HTTP (localhost only) |
+| Tailscale Serve | 8446 | HTTPS (Let's Encrypt) |
+
+## Updating OpenClaw
+
+When the openclaw source code changes:
+
+```bash
+# 1. Rebuild the Docker image
+./scripts/build-openclaw.sh
+
+# 2. Restart the deployment to pick up the new image
+kubectl rollout restart deployment/openclaw -n openclaw
+
+# 3. Watch the rollout
+kubectl rollout status deployment/openclaw -n openclaw
+```
+
+## Manifest Reference
+
+| File | Purpose |
+|---|---|
+| `k8s/apps/openclaw/namespace.yaml` | Dedicated `openclaw` namespace |
+| `k8s/apps/openclaw/pvc.yaml` | 5Gi PVC for state data |
+| `k8s/apps/openclaw/external-secret.yaml` | Syncs secrets from Infisical |
+| `k8s/apps/openclaw/deployment.yaml` | Gateway deployment with health probes |
+| `k8s/apps/openclaw/service.yaml` | NodePort 30789 |
+| `k8s/apps/openclaw/kustomization.yaml` | Kustomize resource list |
+| `k8s/apps/argocd/applications/openclaw-app.yaml` | ArgoCD Application CR |
+| `scripts/build-openclaw.sh` | Docker image build helper |
+
+## Operational Commands
+
+```bash
+# Pod status
+kubectl get pods -n openclaw
+
+# Logs (last 100 lines)
+kubectl logs -n openclaw deploy/openclaw --tail=100
+
+# Follow logs
+kubectl logs -n openclaw deploy/openclaw -f
+
+# Restart deployment
+kubectl rollout restart deployment/openclaw -n openclaw
+
+# Check ExternalSecret status
+kubectl describe externalsecret openclaw-secret -n openclaw
+
+# Force secret re-sync
+kubectl annotate externalsecret openclaw-secret -n openclaw \
+  force-sync=$(date +%s) --overwrite
+
+# Port-forward for local testing (bypasses Tailscale)
+kubectl port-forward -n openclaw svc/openclaw 3000:3000
+
+# Check ArgoCD application sync status
+kubectl get application openclaw -n argocd
+```
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ErrImageNeverPull` | Docker image not built locally | Run `./scripts/build-openclaw.sh` |
+| Pod `CrashLoopBackOff` | Missing secrets or config error | `kubectl logs -n openclaw deploy/openclaw` — check for missing env vars |
+| ExternalSecret `SecretSyncedError` | Secret key missing in Infisical | Add the missing key to Infisical `homelab / prod /` |
+| `connection refused` on `:30789` | Pod not running or not ready | `kubectl get pods -n openclaw` — wait for `Running` status |
+| Health check `/health` failing | Gateway still starting up | Wait 30s for initial startup; check logs for errors |
+| 401 Unauthorized on gateway | Wrong `OPENCLAW_GATEWAY_TOKEN` | Verify the token in Infisical matches what you use in requests |
+| Model API errors | Invalid or expired API key | Update the key in Infisical; force ESO re-sync; restart pod |
+| Tailscale URL not responding | `tailscale serve` not configured | Run `tailscale serve --bg --https 8446 http://localhost:30789` |

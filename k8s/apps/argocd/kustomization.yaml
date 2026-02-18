@@ -12,3 +12,4 @@ resources:
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
   - applications/kubernetes-dashboard-app.yaml
+  - applications/openclaw-app.yaml
