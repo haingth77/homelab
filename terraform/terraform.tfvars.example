@@ -1,6 +1,16 @@
 # Copy this file to terraform.tfvars and fill in real values.
 # terraform.tfvars is gitignored — never commit it.
 
+# SSH private key for the ArgoCD deploy key.
+# 1. Generate: ssh-keygen -t ed25519 -f /tmp/argocd-deploy-key -N "" -C "argocd@homelab"
+# 2. Add the PUBLIC key to GitHub: repo → Settings → Deploy keys → Add deploy key (read-only)
+# 3. Paste the PRIVATE key below (multiline value in quotes).
+argocd_repo_ssh_private_key = <<-EOT
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  REPLACE_WITH_PRIVATE_KEY_CONTENTS
+  -----END OPENSSH PRIVATE KEY-----
+EOT
+
 kube_context     = "orbstack"
 argocd_version   = "7.8.0"
 homelab_repo_url = "https://github.com/holdennguyen/homelab.git"
