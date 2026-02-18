@@ -1,0 +1,237 @@
+# Architecture
+
+This document describes the full architecture of the homelab: how the three infrastructure layers relate to each other, how services are deployed and connected, and how all configuration flows from code to running pods.
+
+## Overview
+
+The homelab runs on a single **Mac mini M4** using **OrbStack** as the Kubernetes runtime. Everything is codified — no ad-hoc `kubectl` commands are part of normal operations. The infrastructure is organized into three distinct layers with clear responsibilities:
+
+```mermaid
+flowchart TD
+    subgraph layer0["Layer 0 — Terraform (bootstrap, run once)"]
+        TF["terraform apply"]
+        TF --> A["ArgoCD Helm release"]
+        TF --> B["Bootstrap K8s Secrets\nnever in git"]
+        TF --> C["ArgoCD root Application\nApp of Apps"]
+        TF --> D["Infisical Application CR\nwith sensitive Helm values"]
+    end
+
+    subgraph layer1["Layer 1 — ArgoCD (GitOps, driven by git push)"]
+        C --> E["Application: infisical"]
+        C --> F["Application: external-secrets"]
+        C --> G["Application: external-secrets-config"]
+        C --> H["Application: postgresql"]
+        C --> I["Application: gitea"]
+        C --> J["Application: kubernetes-dashboard"]
+        D --> E
+    end
+
+    subgraph layer2["Layer 2 — Infisical + ESO (secret management)"]
+        E --> InfisicalSvc["Infisical service\nrunning in cluster"]
+        F --> ESOOperator["ESO operator"]
+        G --> CSS["ClusterSecretStore\nconnected to Infisical"]
+        CSS --> ES1["ExternalSecret → postgresql-secret"]
+        CSS --> ES2["ExternalSecret → gitea-secret"]
+        ES1 --> K8sSecret1["K8s Secret: postgresql-secret"]
+        ES2 --> K8sSecret2["K8s Secret: gitea-secret"]
+    end
+
+    K8sSecret1 --> H
+    K8sSecret2 --> I
+```
+
+## Layer 0: Terraform
+
+Terraform bootstraps the cluster exactly once. After `terraform apply`, no more Terraform is needed for day-to-day operations — only for credential rotation or ArgoCD version upgrades.
+
+**What Terraform creates:**
+
+| Resource | Where | Why Terraform (not git) |
+|---|---|---|
+| `argocd` namespace | cluster | Must exist before Helm install |
+| ArgoCD Helm release | `argocd` namespace | Installs ArgoCD itself — can't use ArgoCD to deploy ArgoCD |
+| `infisical-secrets` K8s Secret | `infisical` namespace | Contains `ENCRYPTION_KEY` + `AUTH_SECRET` — Infisical needs these before it can run, so they can't come from Infisical |
+| `infisical-helm-secrets` K8s Secret | `argocd` namespace | Postgres + Redis passwords for the Infisical Helm chart. ArgoCD `Application` CRs don't support `valuesFrom` referencing K8s Secrets, so Terraform injects them via `helm.valuesObject` |
+| `infisical-machine-identity` K8s Secret | `external-secrets` namespace | ESO uses this to authenticate to Infisical. Terraform owns it so the credential can be rotated with `terraform apply` |
+| `repo-homelab` K8s Secret | `argocd` namespace | SSH deploy key for ArgoCD to clone the private GitHub repo |
+| ArgoCD root Application (`argocd-apps`) | `argocd` namespace | Triggers the App of Apps — the root of all GitOps |
+| ArgoCD Infisical Application (`infisical`) | `argocd` namespace | Created by Terraform because its Helm values embed sensitive credentials |
+
+**Why Terraform for ArgoCD, not `kubectl apply`?**
+
+Every `kubectl apply` invocation is an untracked side-effect. Terraform tracks all resources in `terraform.tfstate`, which means:
+- `terraform plan` shows exactly what will change before applying
+- `terraform destroy` cleanly removes everything
+- The full bootstrap is reproducible from a fresh cluster with a single command
+
+## Layer 1: ArgoCD (App of Apps)
+
+ArgoCD watches the GitHub repository and applies any changes to `k8s/apps/` automatically. The pattern used is **App of Apps**: one root Application (`argocd-apps`) points to `k8s/apps/argocd/`, which contains the Application CRs for every other service.
+
+```mermaid
+flowchart LR
+    subgraph git["GitHub: holdennguyen/homelab"]
+        direction TB
+        RootDir["k8s/apps/argocd/\nkustomization.yaml"]
+        ESDir["k8s/apps/external-secrets/"]
+        PGDir["k8s/apps/postgresql/"]
+        GiteaDir["k8s/apps/gitea/"]
+        DashDir["k8s/apps/kubernetes-dashboard/"]
+    end
+
+    subgraph argocd["ArgoCD (argocd namespace)"]
+        RootApp["argocd-apps\n(created by Terraform)"]
+        InfisicalApp["infisical\n(created by Terraform)"]
+        ESOApp["external-secrets"]
+        ESCApp["external-secrets-config"]
+        PGApp["postgresql"]
+        GiteaApp["gitea"]
+        DashApp["kubernetes-dashboard"]
+    end
+
+    RootApp -- "syncs" --> RootDir
+    RootDir -- "creates" --> ESOApp
+    RootDir -- "creates" --> ESCApp
+    RootDir -- "creates" --> PGApp
+    RootDir -- "creates" --> GiteaApp
+    RootDir -- "creates" --> DashApp
+
+    ESOApp -- "syncs Helm chart" --> ESODir["charts.external-secrets.io"]
+    ESCApp -- "syncs" --> ESDir
+    PGApp -- "syncs" --> PGDir
+    GiteaApp -- "syncs" --> GiteaDir
+    DashApp -- "syncs" --> DashDir
+    InfisicalApp -- "syncs Helm chart" --> InfisicalChart["cloudsmith Helm repo"]
+```
+
+**Sync policies** on all applications:
+- `automated.prune: true` — resources removed from git are deleted from the cluster
+- `automated.selfHeal: true` — any manual `kubectl` change is reverted within ~3 minutes
+- All applications target `targetRevision: HEAD` — every push to `main` is deployed
+
+## Layer 2: Secret Management
+
+Secrets never live in git. All application credentials flow from **Infisical** (the secret store) through **External Secrets Operator** into Kubernetes Secrets that pods consume.
+
+```mermaid
+flowchart TD
+    subgraph infisical_ui["Infisical UI / CLI"]
+        dev["Developer adds secret\nPOSTGRES_PASSWORD = abc123"]
+    end
+
+    subgraph infisical_svc["Infisical (infisical namespace)"]
+        InfisicalAPI["Infisical API\nproject: homelab / prod"]
+    end
+
+    subgraph eso["External Secrets Operator (external-secrets namespace)"]
+        CSS["ClusterSecretStore\ninfisical\nauthenticates via machine identity"]
+        ES["ExternalSecret\npostgresql-secret"]
+    end
+
+    subgraph gitea_ns["gitea-system namespace"]
+        K8sSecret["K8s Secret\npostgresql-secret"]
+        PgPod["PostgreSQL Pod\nenv: POSTGRES_PASSWORD"]
+    end
+
+    dev --> InfisicalAPI
+    CSS -- "Universal Auth\nclientId + clientSecret" --> InfisicalAPI
+    InfisicalAPI -- "GET /api/v3/secrets/raw\n?workspaceSlug=homelab\n&environment=prod" --> ES
+    ES -- "creates/updates" --> K8sSecret
+    K8sSecret -- "envFrom / secretKeyRef" --> PgPod
+```
+
+For the full secret management reference, see [docs/secret-management.md](./secret-management.md).
+
+## Service Map
+
+```mermaid
+flowchart TD
+    subgraph infisicalNs["infisical namespace"]
+        InfisicalPod["Infisical\nNodePort :30445"]
+        InfisicalPG["PostgreSQL\n(Infisical internal)"]
+        InfisicalRedis["Redis\n(Infisical internal)"]
+        InfisicalPod --> InfisicalPG
+        InfisicalPod --> InfisicalRedis
+    end
+
+    subgraph esoNs["external-secrets namespace"]
+        ESOPod["ESO operator"]
+        CSS["ClusterSecretStore: infisical"]
+    end
+
+    subgraph argocdNs["argocd namespace"]
+        ArgoServer["argocd-server\nNodePort :30080"]
+        ArgoController["application-controller"]
+        ArgoRepo["repo-server"]
+    end
+
+    subgraph giteaNs["gitea-system namespace"]
+        GiteaPod["Gitea\nNodePort :30300"]
+        PGPod["PostgreSQL\nClusterIP :5432"]
+        GiteaPod -- "postgresql:5432" --> PGPod
+    end
+
+    subgraph dashNs["kubernetes-dashboard namespace"]
+        DashPod["Dashboard\nNodePort :30444"]
+    end
+
+    ESOPod --> CSS
+    CSS -- "Universal Auth" --> InfisicalPod
+    CSS -- "ExternalSecret" --> GiteaPod
+    CSS -- "ExternalSecret" --> PGPod
+    ArgoController -- "poll git" --> GitHub["GitHub\nholdennguyen/homelab"]
+```
+
+## Networking
+
+Services are exposed through **Tailscale Serve**, which provides automatic TLS certificates and makes services accessible from any device on the tailnet. OrbStack NodePorts only bind to `localhost`, and Tailscale Serve bridges the gap.
+
+| Service | NodePort | Tailscale URL | Tailscale Port |
+|---|---|---|---|
+| ArgoCD | `:30080` (HTTP) | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
+| Gitea | `:30300` | `https://holdens-mac-mini.story-larch.ts.net` | 443 |
+| K8s Dashboard | `:30444` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
+| Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
+
+For the full networking reference, see [docs/networking.md](./networking.md).
+
+## Technology Choices
+
+| Technology | Role | Why |
+|---|---|---|
+| **OrbStack** | Kubernetes runtime | Lightweight, single-node, Mac-native, fast startup |
+| **Terraform** | Bootstrap layer | Tracks cluster setup as code; reproducible; safe credential injection via tfvars |
+| **ArgoCD** | GitOps controller | Continuous sync from git; self-healing; declarative; App of Apps for service lifecycle |
+| **Infisical** | Secret store | Self-hosted; UI for secret management; supports ESO Universal Auth; project/environment scoping |
+| **External Secrets Operator** | Secret sync | Bridges Infisical to Kubernetes Secrets; polling refresh; decoupled from app manifests |
+| **Tailscale** | Private networking | Zero-config WireGuard VPN; MagicDNS; auto TLS via `tailscale serve`; works across all devices |
+| **Kustomize** | Manifest rendering | Native in `kubectl apply -k` and ArgoCD; overlays without templating language |
+
+## Repository Layout
+
+```
+homelab/
+├── .gitignore                      # Guards terraform.tfvars, .terraform/, *.tfstate
+├── README.md                       # Quick-start and service table
+├── terraform/                      # Layer 0 — bootstrap (run once)
+│   ├── README.md                   # Terraform variables and day-2 ops reference
+│   ├── providers.tf                # kubernetes + helm + local + null providers
+│   ├── argocd.tf                   # ArgoCD Helm release, Infisical App, root App, SSH credential
+│   ├── bootstrap-secrets.tf        # K8s Secrets created from tfvars
+│   ├── variables.tf                # All variable declarations
+│   ├── outputs.tf                  # Post-apply instructions
+│   └── terraform.tfvars.example   # Template — copy to terraform.tfvars
+├── k8s/                            # Layer 1 — GitOps manifests
+│   └── apps/
+│       ├── argocd/                 # App of Apps kustomization + Application CRs
+│       ├── external-secrets/       # ClusterSecretStore
+│       ├── infisical/              # (Helm chart managed by Terraform-created Application)
+│       ├── gitea/                  # Gitea kustomize manifests + ExternalSecret
+│       ├── kubernetes-dashboard/   # Dashboard kustomize manifests
+│       └── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
+└── docs/                           # Extended documentation
+    ├── architecture.md             # This file
+    ├── bootstrap.md                # Day-1 setup walkthrough
+    ├── networking.md               # Tailscale + NodePort deep-dive
+    └── secret-management.md       # Infisical + ESO reference
+```

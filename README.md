@@ -134,7 +134,7 @@ sequenceDiagram
 ### Prerequisites
 
 - OrbStack with Kubernetes enabled
-- `kubectl` and `terraform` (>= 1.6) installed
+- `kubectl` and `terraform` (>= 1.5) installed
 - Git push access to `github.com/holdennguyen/homelab`
 - Tailscale installed with Serve enabled on the tailnet
 
@@ -167,7 +167,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ### 3. Populate secrets in Infisical
 
-Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the Infisical UI and create the following secrets in a project (e.g. `homelab / production`):
+Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the Infisical UI and create the following secrets in the `homelab` project under the `prod` environment. The project slug **must** be `homelab`:
 
 | Key | Description |
 |-----|-------------|
@@ -177,7 +177,7 @@ Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the
 | `GITEA_DB_PASSWORD` | Same as `POSTGRES_PASSWORD` |
 | `GITEA_SECRET_KEY` | Random base64 string (`openssl rand -base64 32`) |
 
-Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to rotate the bootstrap credential.
+Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), grant it **Member** access to the `homelab` project, update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to update the credential. See [docs/bootstrap.md](docs/bootstrap.md) for the full step-by-step.
 
 ### 4. Expose Services via Tailscale
 
@@ -213,15 +213,21 @@ kubectl get pods -n gitea-system
 kubectl get pods -n infisical
 ```
 
-## Component Documentation
+## Documentation
 
-Each service has detailed documentation covering its configuration, integration points, and operational notes:
-
-- [Networking](docs/networking.md) -- Tailscale Serve + NodePort architecture, request path, TLS, port map, troubleshooting
-- [Argo CD](k8s/apps/argocd/README.md) -- GitOps controller, Application definitions, sync policies
-- [Gitea](k8s/apps/gitea/README.md) -- Config seeding via init container, env var overrides, service configuration
-- [PostgreSQL](k8s/apps/postgresql/README.md) -- Database configuration, pg_hba.conf, PGDATA layout, Secret management
-- [Kubernetes Dashboard](k8s/apps/kubernetes-dashboard/README.md) -- Remote cluster monitoring, authentication, mobile access
+| Document | What it covers |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | 3-layer design, technology choices, full service map, repository layout |
+| [docs/bootstrap.md](docs/bootstrap.md) | Step-by-step setup from scratch: prerequisites, secrets generation, Terraform, Infisical, Tailscale |
+| [docs/secret-management.md](docs/secret-management.md) | How secrets flow from Infisical → ESO → Kubernetes; adding secrets; rotating credentials |
+| [docs/networking.md](docs/networking.md) | Tailscale Serve + NodePort architecture, request path, TLS, full port map, troubleshooting |
+| [terraform/README.md](terraform/README.md) | All Terraform variables, what resources are managed, day-2 operations |
+| [k8s/apps/argocd/README.md](k8s/apps/argocd/README.md) | App of Apps pattern, sync waves, adding new applications |
+| [k8s/apps/infisical/README.md](k8s/apps/infisical/README.md) | Infisical deployment, first-time setup, machine identity, bootstrap secrets |
+| [k8s/apps/external-secrets/README.md](k8s/apps/external-secrets/README.md) | ClusterSecretStore, ExternalSecret pattern, adding secrets for new services |
+| [k8s/apps/gitea/README.md](k8s/apps/gitea/README.md) | Config seeding via init container, env var overrides, ExternalSecret integration |
+| [k8s/apps/postgresql/README.md](k8s/apps/postgresql/README.md) | Database configuration, pg_hba.conf, PGDATA layout, password management |
+| [k8s/apps/kubernetes-dashboard/README.md](k8s/apps/kubernetes-dashboard/README.md) | Remote cluster monitoring, authentication, mobile access |
 
 ## Future Plans
 

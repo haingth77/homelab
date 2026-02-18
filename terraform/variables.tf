@@ -1,3 +1,9 @@
+variable "argocd_admin_password_bcrypt" {
+  description = "Bcrypt hash of the ArgoCD admin password (set via Helm to avoid ESO annotation propagation). Generate: python3 -c \"import bcrypt; print(bcrypt.hashpw(b'PASSWORD', bcrypt.gensalt(10)).decode())\""
+  type        = string
+  sensitive   = true
+}
+
 variable "argocd_repo_ssh_private_key" {
   description = "SSH private key for the ArgoCD deploy key (read-only access to the homelab repo)"
   type        = string

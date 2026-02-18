@@ -45,7 +45,120 @@ resource "helm_release" "argocd" {
     value = "32Mi"
   }
 
+  # ESO adds a finalizer to every ExternalSecret it owns. ArgoCD sees this
+  # finalizer as drift (it is not in git). This global customization tells
+  # ArgoCD to ignore the finalizers field on all ExternalSecret resources,
+  # preventing permanent OutOfSync noise across every Application that uses ESO.
+  set {
+    name  = "configs.cm.resource\\.customizations\\.ignoreDifferences\\.external-secrets\\.io_ExternalSecret"
+    value = "jsonPointers:\n- /metadata/finalizers\n"
+  }
+
+  # Set the ArgoCD admin password directly via Helm values so it is fully owned
+  # by this Helm release. Using an ExternalSecret with creationPolicy=Merge would
+  # cause ArgoCD to propagate its tracking annotation to argocd-secret, then try
+  # to prune it (since argocd-secret is not in git). Helm ownership avoids this.
+  #
+  # Generate the bcrypt hash with:
+  #   python3 -c "import bcrypt; print(bcrypt.hashpw(b'PASSWORD', bcrypt.gensalt(10)).decode())"
+  # Store the plaintext password in Infisical as ARGOCD_ADMIN_PASSWORD for reference.
+  set {
+    name  = "configs.secret.argocdServerAdminPassword"
+    value = var.argocd_admin_password_bcrypt
+  }
+
   depends_on = [kubernetes_namespace.argocd]
+}
+
+# ── Infisical Application CR ──────────────────────────────────────────────────
+# The Infisical Application is managed by Terraform (not by the App of Apps kustomization)
+# because its Helm values include sensitive credentials (postgres/redis passwords) that
+# cannot be stored in git. The Application spec's helm.values contains them directly,
+# sourced from tfvars which are gitignored.
+
+locals {
+  infisical_app_yaml = yamlencode({
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "infisical"
+      namespace = "argocd"
+      annotations = {
+        "argocd.argoproj.io/sync-wave" = "0"
+      }
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = "https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/"
+        chart          = "infisical-standalone"
+        targetRevision = "1.7.2"
+        helm = {
+          valuesObject = {
+            infisical = {
+              replicaCount  = 1
+              kubeSecretRef = "infisical-secrets"
+              service = {
+                type     = "NodePort"
+                nodePort = "30445"
+              }
+              resources = {
+                requests = { cpu = "100m", memory = "512Mi" }
+                limits   = { memory = "1500Mi" }
+              }
+            }
+            ingress = { enabled = false }
+            postgresql = {
+              enabled          = true
+              fullnameOverride = "postgresql"
+              auth = {
+                username = "infisical"
+                password = var.infisical_postgres_password
+                database = "infisicalDB"
+              }
+            }
+            redis = {
+              enabled          = true
+              fullnameOverride = "redis"
+              architecture     = "standalone"
+              auth             = { password = var.infisical_redis_password }
+            }
+          }
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = "infisical"
+      }
+      syncPolicy = {
+        automated = { prune = true, selfHeal = true }
+        syncOptions = ["CreateNamespace=true"]
+      }
+      ignoreDifferences = [{
+        group        = ""
+        kind         = "Secret"
+        jsonPointers = ["/data"]
+      }]
+    }
+  })
+}
+
+resource "local_file" "infisical_app" {
+  filename        = "${path.module}/.infisical-app.yaml"
+  content         = local.infisical_app_yaml
+  file_permission = "0600"
+}
+
+resource "null_resource" "infisical_app" {
+  triggers = {
+    manifest = local.infisical_app_yaml
+  }
+
+  provisioner "local-exec" {
+    command = "kubectl apply --server-side -f '${local_file.infisical_app.filename}'"
+  }
+
+  depends_on = [helm_release.argocd, local_file.infisical_app]
 }
 
 # ── ArgoCD repository credential ──────────────────────────────────────────────

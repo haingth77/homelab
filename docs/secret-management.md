@@ -1,0 +1,297 @@
+# Secret Management
+
+This document covers how secrets are managed in the homelab: where they are stored, how they flow into running pods, how to add secrets for new services, and how to rotate credentials.
+
+## Design Principles
+
+1. **No secrets in git** — no `Secret` YAML files are committed. Only `ExternalSecret` resources (which reference secret names, not values) live in git.
+2. **Infisical is the single source of truth** — all application credentials live in one place with an audit trail.
+3. **Terraform owns bootstrap secrets** — a small set of credentials that Infisical itself needs to start (ENCRYPTION_KEY, AUTH_SECRET, postgres/redis passwords) are injected by Terraform from a local `terraform.tfvars` file that is gitignored.
+4. **ESO bridges Infisical to Kubernetes** — the External Secrets Operator watches `ExternalSecret` resources and creates real `Secret` objects in the cluster, polling Infisical every hour.
+
+## Secret Layers
+
+```mermaid
+flowchart TD
+    subgraph git["Git (public, no secrets)"]
+        ES["ExternalSecret YAML\n(references key names only)"]
+        CSS_yaml["ClusterSecretStore YAML\n(references secret name only)"]
+    end
+
+    subgraph tfvars["terraform.tfvars (gitignored, local only)"]
+        TFVars["infisical_encryption_key\ninfisical_auth_secret\ninfisical_postgres_password\ninfisical_redis_password\ninfisical_machine_identity_client_id\ninfisical_machine_identity_client_secret\nargocd_repo_ssh_private_key"]
+    end
+
+    subgraph tf["Terraform state"]
+        TFState["bootstrap K8s Secrets\n(sensitive, local tfstate only)"]
+    end
+
+    subgraph cluster["Kubernetes Cluster"]
+        subgraph infisicalNs["infisical namespace"]
+            infisical_secrets["infisical-secrets\nENCRYPTION_KEY + AUTH_SECRET"]
+        end
+        subgraph esoNs["external-secrets namespace"]
+            machine_id["infisical-machine-identity\nclientId + clientSecret"]
+        end
+        subgraph argocdNs["argocd namespace"]
+            helm_secrets["infisical-helm-secrets\npostgres + redis passwords"]
+        end
+        subgraph giteaNs["gitea-system namespace"]
+            pg_secret["postgresql-secret\n(created by ESO)"]
+            gitea_secret["gitea-secret\n(created by ESO)"]
+        end
+    end
+
+    subgraph infisical_store["Infisical (project: homelab / env: prod)"]
+        POSTGRES_PASSWORD["POSTGRES_PASSWORD"]
+        POSTGRES_USER["POSTGRES_USER"]
+        POSTGRES_DB["POSTGRES_DB"]
+        GITEA_DB_PASSWORD["GITEA_DB_PASSWORD"]
+        GITEA_SECRET_KEY["GITEA_SECRET_KEY"]
+    end
+
+    TFVars --> TFState
+    TFState --> infisical_secrets
+    TFState --> machine_id
+    TFState --> helm_secrets
+    CSS_yaml --> machine_id
+    machine_id -- "Universal Auth" --> infisical_store
+    ES --> POSTGRES_PASSWORD
+    ES --> POSTGRES_USER
+    POSTGRES_PASSWORD --> pg_secret
+    GITEA_SECRET_KEY --> gitea_secret
+```
+
+## Bootstrap Secrets (Terraform-Managed)
+
+These secrets are the "chicken-and-egg" exceptions — they cannot come from Infisical because Infisical itself needs them to start.
+
+| K8s Secret | Namespace | Keys | Purpose |
+|---|---|---|---|
+| `infisical-secrets` | `infisical` | `ENCRYPTION_KEY`, `AUTH_SECRET` | Infisical app encryption and session signing |
+| `infisical-helm-secrets` | `argocd` | `values.yaml` (YAML blob) | Postgres + Redis passwords passed to Infisical Helm chart via ArgoCD Application |
+| `infisical-machine-identity` | `external-secrets` | `clientId`, `clientSecret` | ESO authenticates to Infisical using this Universal Auth identity |
+| `repo-homelab` | `argocd` | `sshPrivateKey` | ArgoCD SSH key for cloning the private GitHub repo |
+
+**All of these are created by `terraform apply`.** They live in `terraform.tfstate` (local only) and are never committed to git.
+
+## Infisical Project Structure
+
+```mermaid
+flowchart LR
+    subgraph infisical["Infisical"]
+        subgraph org["Organization"]
+            subgraph project["Project: homelab\nslug: homelab"]
+                subgraph prod["Environment: prod"]
+                    subgraph path["Secret Path: /"]
+                        s1["POSTGRES_PASSWORD"]
+                        s2["POSTGRES_USER"]
+                        s3["POSTGRES_DB"]
+                        s4["GITEA_DB_PASSWORD"]
+                        s5["GITEA_SECRET_KEY"]
+                    end
+                end
+            end
+            subgraph identities["Machine Identities"]
+                MI["homelab-eso\nUniversal Auth"]
+            end
+        end
+    end
+
+    MI -- "Member role\non homelab project" --> project
+```
+
+The ClusterSecretStore in `k8s/apps/external-secrets/cluster-secret-store.yaml` is configured with:
+- `projectSlug: homelab`
+- `environmentSlug: prod`
+- `secretsPath: /`
+
+This means any `ExternalSecret` using this store references secrets by their key name directly (e.g., `key: POSTGRES_PASSWORD`).
+
+## How ExternalSecrets Work
+
+Each application that needs secrets has an `ExternalSecret` resource in its kustomization directory. ArgoCD syncs the `ExternalSecret` to the cluster; ESO then creates the actual `Secret`.
+
+```mermaid
+sequenceDiagram
+    participant ArgoCD
+    participant ESO as ESO Controller
+    participant CSS as ClusterSecretStore
+    participant Infisical
+    participant K8s as Kubernetes
+
+    ArgoCD->>K8s: Apply ExternalSecret (from git)
+    ESO->>CSS: Validate store is ready
+    CSS->>Infisical: POST /api/v1/auth/universal-auth/login
+    Infisical-->>CSS: accessToken (JWT)
+    ESO->>Infisical: GET /api/v3/secrets/raw?workspaceSlug=homelab&environment=prod
+    Infisical-->>ESO: { POSTGRES_PASSWORD: "abc123", ... }
+    ESO->>K8s: Create/Update Secret "postgresql-secret"
+    Note over ESO: Repeats every refreshInterval (1h)
+```
+
+### ExternalSecret for PostgreSQL (`k8s/apps/postgresql/external-secret.yaml`)
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: postgresql-secret
+  namespace: gitea-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: postgresql-secret      # name of the K8s Secret to create
+    creationPolicy: Owner        # ESO owns and garbage-collects this Secret
+  data:
+    - secretKey: POSTGRES_PASSWORD   # key in the K8s Secret
+      remoteRef:
+        key: POSTGRES_PASSWORD       # key name in Infisical
+    - secretKey: POSTGRES_USER
+      remoteRef:
+        key: POSTGRES_USER
+    - secretKey: POSTGRES_DB
+      remoteRef:
+        key: POSTGRES_DB
+    - secretKey: GITEA_DB_PASSWORD
+      remoteRef:
+        key: GITEA_DB_PASSWORD
+```
+
+## Adding Secrets for a New Service
+
+When deploying a new service that needs secrets, follow these steps:
+
+### Step 1: Add the secret to Infisical
+
+Open `https://holdens-mac-mini.story-larch.ts.net:8445`, navigate to the `homelab` project → `prod` environment, and add your secret (e.g., `MY_SERVICE_API_KEY`).
+
+### Step 2: Create an ExternalSecret manifest
+
+Create `k8s/apps/my-service/external-secret.yaml`:
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: my-service-secret
+  namespace: my-service
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: my-service-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: API_KEY
+      remoteRef:
+        key: MY_SERVICE_API_KEY
+```
+
+### Step 3: Add to kustomization
+
+In `k8s/apps/my-service/kustomization.yaml`, add:
+
+```yaml
+resources:
+  - external-secret.yaml
+  # ... other resources
+```
+
+### Step 4: Reference the Secret in the Deployment
+
+```yaml
+env:
+  - name: API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: my-service-secret
+        key: API_KEY
+```
+
+### Step 5: Push to git
+
+ArgoCD will detect the new `ExternalSecret` and sync it. ESO will then create the K8s `Secret` within seconds. The Deployment will get the secret on next rollout.
+
+## Credential Rotation
+
+### Rotating the Machine Identity (ESO ↔ Infisical)
+
+1. In the Infisical UI, go to **Settings → Machine Identities** → create a new identity or generate new credentials for the existing one.
+2. Update `terraform/terraform.tfvars`:
+   ```hcl
+   infisical_machine_identity_client_id     = "<new-client-id>"
+   infisical_machine_identity_client_secret = "<new-client-secret>"
+   ```
+3. Apply:
+   ```bash
+   cd terraform && terraform apply
+   ```
+   Terraform updates only the `infisical-machine-identity` K8s Secret. ESO picks up the new credentials on its next poll cycle (~30s).
+
+### Rotating the Infisical ENCRYPTION_KEY / AUTH_SECRET
+
+> **Warning:** Changing `ENCRYPTION_KEY` requires a data migration — all encrypted secrets in Infisical's database must be re-encrypted. Do this only if the key is compromised, and follow the [Infisical key rotation guide](https://infisical.com/docs/self-hosting/configuration/envars) first.
+
+1. Update `terraform/terraform.tfvars` with new values.
+2. Run `terraform apply`.
+3. Restart the Infisical pod: `kubectl rollout restart deployment -n infisical -l app.kubernetes.io/component=infisical`
+
+### Rotating the ArgoCD SSH Deploy Key
+
+1. Generate a new key: `ssh-keygen -t ed25519 -f /tmp/new-argocd-key -N "" -C "argocd@homelab"`
+2. Add the new public key to GitHub: **repo → Settings → Deploy keys → Add deploy key** (read-only).
+3. Update `terraform/terraform.tfvars`:
+   ```hcl
+   argocd_repo_ssh_private_key = <<-EOT
+   -----BEGIN OPENSSH PRIVATE KEY-----
+   <paste new private key>
+   -----END OPENSSH PRIVATE KEY-----
+   EOT
+   ```
+4. Run `terraform apply`. The `repo-homelab` Secret in the `argocd` namespace is updated; ArgoCD picks it up within ~30 seconds.
+5. Remove the old public key from GitHub Deploy keys.
+
+### Updating an Application Secret (e.g., Gitea's SECRET_KEY)
+
+1. In the Infisical UI, update the value of `GITEA_SECRET_KEY` in `homelab / prod`.
+2. ESO automatically reconciles within `refreshInterval` (1 hour). To apply immediately:
+   ```bash
+   kubectl annotate externalsecret gitea-secret -n gitea-system \
+     force-sync=$(date +%s) --overwrite
+   ```
+3. The K8s Secret is updated. Restart the Gitea pod to pick up the new value:
+   ```bash
+   kubectl rollout restart deployment gitea -n gitea-system
+   ```
+
+## Troubleshooting
+
+```mermaid
+flowchart TD
+    Start["ExternalSecret shows SecretSyncedError"]
+    A["kubectl describe externalsecret <name> -n <ns>"]
+    Start --> A
+    A --> B{"Error message?"}
+    B -- "ClusterSecretStore not ready" --> C["kubectl get clustersecretstore infisical"]
+    C --> D{"Status?"}
+    D -- "InvalidProviderConfig\n401 Unauthorized" --> E["Machine identity credentials wrong\nor not in Terraform tfvars yet\n→ terraform apply"]
+    D -- "InvalidProviderConfig\n403 Forbidden" --> F["Machine identity not added\nto homelab project in Infisical UI\n→ Project → Access Control → Add Identity"]
+    D -- "InvalidProviderConfig\n404 Project not found" --> G["Project slug wrong\nCheck Infisical project settings\nEnsure slug = 'homelab'"]
+    D -- "Valid / Ready: True" --> H["Store is fine, force ExternalSecret refresh:\nkubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite"]
+    B -- "secret key not found" --> I["Key name doesn't exist in Infisical\n→ Add it in Infisical UI\n→ homelab / prod / POSTGRES_PASSWORD etc."]
+```
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ClusterSecretStore` shows `InvalidProviderConfig` 401 | Wrong machine identity credentials | `terraform apply` with correct credentials in tfvars |
+| `ClusterSecretStore` shows `InvalidProviderConfig` 403 | Machine identity not added to Infisical project | Infisical UI → Project → Access Control → Machine Identities → Add |
+| `ClusterSecretStore` shows `InvalidProviderConfig` 404 | Wrong project slug | Infisical UI → Project Settings → confirm slug is `homelab` |
+| `ExternalSecret` shows `SecretSyncedError` after store becomes valid | Cached old error state | `kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite` |
+| Pod can't start, missing secret keys | ExternalSecret not synced yet | `kubectl get externalsecret -n <ns>` — wait for `SecretSynced: True` |
+| Infisical pod crashes on startup | `infisical-secrets` K8s Secret is wrong/missing | Check `kubectl get secret infisical-secrets -n infisical`; re-run `terraform apply` |

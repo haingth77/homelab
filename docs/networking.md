@@ -33,7 +33,7 @@ flowchart TD
 
         subgraph orbstack["OrbStack Kubernetes"]
             subgraph argocdNs["argocd namespace"]
-                ArgoCDSvc["argocd-server\nNodePort 30080/30443"]
+                ArgoCDSvc["argocd-server\nNodePort 30080 (HTTP, insecure mode)"]
             end
             subgraph giteaNs["gitea-system namespace"]
                 GiteaSvc["gitea\nNodePort 30300/30022"]
@@ -42,16 +42,21 @@ flowchart TD
             subgraph dashNs["kubernetes-dashboard namespace"]
                 DashSvc["kubernetes-dashboard\nNodePort 30444"]
             end
+            subgraph infisicalNs["infisical namespace"]
+                InfisicalSvc["infisical\nNodePort 30445"]
+            end
         end
 
         TLS443 -- "http://localhost:30300" --> GiteaSvc
-        TLS8443 -- "https+insecure://localhost:30443" --> ArgoCDSvc
+        TLS8443 -- "http://localhost:30080" --> ArgoCDSvc
         TLS8444 -- "https+insecure://localhost:30444" --> DashSvc
+        TLS8445["HTTPS :8445\nauto Let's Encrypt cert"] -- "http://localhost:30445" --> InfisicalSvc
     end
 
     iPhone -- "https://holdens-mac-mini\n.story-larch.ts.net" --> TLS443
     iPad -- "https://holdens-mac-mini\n.story-larch.ts.net:8443" --> TLS8443
     iPhone -- ":8444" --> TLS8444
+    iPad -- ":8445" --> TLS8445
 ```
 
 ## Request Path (Detailed)
@@ -72,7 +77,7 @@ sequenceDiagram
     Browser->>WG: TLS ClientHello (SNI: holdens-mac-mini.story-larch.ts.net)
     WG->>TServe: Decrypted WireGuard packet to 100.77.144.4:443
     TServe->>TServe: TLS termination (Let's Encrypt cert)
-    TServe->>NodePort: HTTP GET / -> localhost:30300
+    TServe->>NodePort: HTTP GET / -> http://localhost:30300
     NodePort->>Pod: Forward to gitea pod :3000
     Pod-->>TServe: HTTP 200 (HTML)
     TServe-->>Browser: HTTPS 200 (re-encrypted)
@@ -104,26 +109,18 @@ spec:
       name: ssh
 ```
 
-### ArgoCD (`k8s/apps/argocd/kustomization.yaml` patch)
+### ArgoCD (Terraform Helm values in `terraform/argocd.tf`)
 
-The upstream ArgoCD `install.yaml` defines `argocd-server` as `ClusterIP`. A Kustomize JSON patch overrides it to `NodePort`:
+ArgoCD is installed by Terraform via Helm. The NodePort and insecure mode are set via Helm values — there is no Kustomize patch for ArgoCD:
 
-```yaml
-patches:
-  - target:
-      kind: Service
-      name: argocd-server
-    patch: |
-      - op: replace
-        path: /spec/type
-        value: NodePort
-      - op: add
-        path: /spec/ports/0/nodePort    # HTTP port 80
-        value: 30080
-      - op: add
-        path: /spec/ports/1/nodePort    # HTTPS port 443
-        value: 30443
+```hcl
+set { name = "server.service.type";          value = "NodePort" }
+set { name = "server.service.nodePorts.http"; value = "30080"   }
+set { name = "server.service.nodePorts.https"; value = "30443"  }
+set { name = "configs.params.server\\.insecure"; value = "true" }
 ```
+
+Running in `--insecure` mode means ArgoCD terminates TLS at the Tailscale Serve layer instead of internally. Tailscale provides a valid Let's Encrypt certificate; ArgoCD serves plain HTTP on `:30080`.
 
 ### Port Map
 
@@ -131,10 +128,10 @@ patches:
 |---------|---------------|----------|---------------|
 | Gitea HTTP | 3000 | 30300 | `http://localhost:30300` |
 | Gitea SSH | 22 | 30022 | `ssh://localhost:30022` |
-| ArgoCD HTTP | 80 (-> 8080) | 30080 | `http://localhost:30080` |
-| ArgoCD HTTPS | 443 (-> 8080) | 30443 | `https://localhost:30443` |
+| ArgoCD HTTP | 8080 | 30080 | `http://localhost:30080` |
 | K8s Dashboard | 8443 | 30444 | `https://localhost:30444` |
-| PostgreSQL | 5432 | -- | ClusterIP only (no external access) |
+| Infisical | 8080 | 30445 | `http://localhost:30445` |
+| PostgreSQL (Gitea) | 5432 | — | ClusterIP only (no external access) |
 
 ## Layer 2: Tailscale Serve
 
@@ -146,11 +143,14 @@ patches:
 # Gitea -- default HTTPS port (443)
 tailscale serve --bg http://localhost:30300
 
-# ArgoCD -- custom HTTPS port (8443)
-tailscale serve --bg --https 8443 https+insecure://localhost:30443
+# ArgoCD -- custom HTTPS port (8443); ArgoCD runs in insecure mode so plain HTTP
+tailscale serve --bg --https 8443 http://localhost:30080
 
-# Kubernetes Dashboard -- custom HTTPS port (8444)
+# Kubernetes Dashboard -- custom HTTPS port (8444); dashboard uses self-signed cert
 tailscale serve --bg --https 8444 https+insecure://localhost:30444
+
+# Infisical -- custom HTTPS port (8445)
+tailscale serve --bg --https 8445 http://localhost:30445
 ```
 
 The `--bg` flag runs the proxy as a persistent background service that survives terminal sessions. The `https+insecure://` prefix tells Tailscale to connect to ArgoCD's self-signed HTTPS endpoint without verifying its certificate (since TLS is re-terminated by Tailscale with a valid cert).
@@ -192,10 +192,13 @@ https://holdens-mac-mini.story-larch.ts.net (tailnet only)
 |-- / proxy http://localhost:30300
 
 https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
-|-- / proxy https+insecure://localhost:30443
+|-- / proxy http://localhost:30080
 
 https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
 |-- / proxy https+insecure://localhost:30444
+
+https://holdens-mac-mini.story-larch.ts.net:8445 (tailnet only)
+|-- / proxy http://localhost:30445
 ```
 
 ### Manage Serve
@@ -233,6 +236,7 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 | Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) |
 | ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
 | K8s Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
+| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
 
 ### Tailscale Serve vs Funnel
 
@@ -281,7 +285,7 @@ flowchart TD
 
             subgraph orb["OrbStack Kubernetes"]
                 subgraph argocd["argocd ns"]
-                    ArgoSvc["argocd-server\nNodePort 30443"]
+                    ArgoSvc["argocd-server\nNodePort 30080 (HTTP)"]
                     ArgoCtrl["application-controller"]
                 end
                 subgraph gitea["gitea-system ns"]
@@ -293,11 +297,15 @@ flowchart TD
                 subgraph dash["kubernetes-dashboard ns"]
                     DashSvc["kubernetes-dashboard\nNodePort 30444"]
                 end
+                subgraph infisical_ns["infisical ns"]
+                    InfisicalSvc2["infisical\nNodePort 30445"]
+                end
             end
 
             TS -- "localhost:30300" --> GiteaSvc
-            TS -- "localhost:30443" --> ArgoSvc
+            TS -- "localhost:30080" --> ArgoSvc
             TS -- "localhost:30444" --> DashSvc
+            TS -- "localhost:30445" --> InfisicalSvc2
             GiteaSvc --> GiteaPod
             GiteaPod --> PgSvc
             PgSvc --> PgPod

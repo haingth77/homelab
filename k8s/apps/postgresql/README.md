@@ -29,13 +29,15 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `kustomization.yaml` | Lists all resources for Kustomize/Argo CD rendering |
-| `namespace.yaml` | Creates the `gitea-system` namespace (owns it via `CreateNamespace=true` in the Argo CD Application) |
+| `kustomization.yaml` | Lists all resources for Kustomize/ArgoCD rendering |
+| `namespace.yaml` | Creates the `gitea-system` namespace (owns it via `CreateNamespace=true` in the ArgoCD Application) |
 | `pvc.yaml` | 5Gi `ReadWriteOnce` PersistentVolumeClaim for database files |
-| `secret.yaml` | Credentials for PostgreSQL superuser and Gitea database access |
+| `external-secret.yaml` | `ExternalSecret` that pulls all PostgreSQL credentials from Infisical via ESO |
 | `postgresql-hba-config.yaml` | Custom `pg_hba.conf` controlling client authentication |
 | `deployment.yaml` | PostgreSQL Deployment with volume mounts and resource limits |
 | `service.yaml` | ClusterIP Service exposing port 5432 |
+
+> **No `secret.yaml`:** There is no static `Secret` manifest in this directory. All credentials originate in Infisical and are synchronized by the External Secrets Operator. See [docs/secret-management.md](../../docs/secret-management.md).
 
 ## Configuration Details
 
@@ -103,33 +105,53 @@ Mounting the ConfigMap inside `/var/lib/postgresql/data/` (the PVC) would cause 
 
 ### Secret Management
 
-The `postgresql-secret` contains four base64-encoded values:
+The `postgresql-secret` K8s Secret is created by the External Secrets Operator by pulling credentials from Infisical. There is no `secret.yaml` in git — values live in Infisical under `homelab / prod /`.
 
-| Key | Value | Used By |
-|-----|-------|---------|
-| `POSTGRES_USER` | `gitea` | PostgreSQL init (creates this as the superuser) |
-| `POSTGRES_PASSWORD` | `giteapassword` | PostgreSQL init (sets the superuser password) |
-| `POSTGRES_DB` | `gitea` | PostgreSQL init (creates this database) |
-| `GITEA_DB_PASSWORD` | `giteapassword` | Gitea Deployment (injected as `GITEA__database__PASSWD` env var) |
+| K8s Secret Key | Infisical Key | Used By |
+|----------------|--------------|---------|
+| `POSTGRES_USER` | `POSTGRES_USER` | PostgreSQL init (creates this as the superuser) |
+| `POSTGRES_PASSWORD` | `POSTGRES_PASSWORD` | PostgreSQL init (sets the superuser password) |
+| `POSTGRES_DB` | `POSTGRES_DB` | PostgreSQL init (creates this database) |
+| `GITEA_DB_PASSWORD` | `GITEA_DB_PASSWORD` | Gitea Deployment (injected as `GITEA__database__PASSWD` env var) |
 
-`POSTGRES_PASSWORD` and `GITEA_DB_PASSWORD` must match because `POSTGRES_USER=gitea` makes `gitea` the PostgreSQL superuser, and Gitea connects as that same user. If they differ, Gitea will fail with `password authentication failed`.
+`POSTGRES_PASSWORD` and `GITEA_DB_PASSWORD` must be set to identical values in Infisical. PostgreSQL creates the `gitea` user with `POSTGRES_PASSWORD` during `initdb`, and Gitea connects as that same user using `GITEA_DB_PASSWORD`. If they differ, Gitea will fail with `password authentication failed`.
 
-**Important:** These are development-only values. For production, generate strong random passwords and consider using Sealed Secrets or an External Secrets Operator.
+To add or update secrets, open the Infisical UI at `https://holdens-mac-mini.story-larch.ts.net:8445`, navigate to `homelab / prod`, and update the values. ESO reconciles within `refreshInterval` (1 hour), or immediately:
+
+```bash
+kubectl annotate externalsecret postgresql-secret -n gitea-system \
+  force-sync=$(date +%s) --overwrite
+```
 
 ### Changing the Password
 
-Because PostgreSQL stores the password hash in its data files during `initdb`, changing the Secret alone does not update the running database. To change the password:
+Because PostgreSQL stores the password hash in its data files during `initdb`, updating the secret in Infisical alone does not change the running database.
 
-1. Update the Secret values in `secret.yaml`
-2. Delete the PostgreSQL PVC to force reinitialization:
+**Destructive reset (data loss):**
 
 ```bash
 kubectl scale deployment postgresql -n gitea-system --replicas=0
 kubectl delete pvc postgresql-data -n gitea-system
+# Update Infisical to new values, force ESO reconcile, then restart
+kubectl annotate externalsecret postgresql-secret -n gitea-system force-sync=$(date +%s) --overwrite
 kubectl scale deployment postgresql -n gitea-system --replicas=1
 ```
 
-This destroys all database data. For non-destructive password changes, exec into the pod and run `ALTER USER`.
+**Non-destructive (no data loss):**
+
+```bash
+# 1. Change the password at the DB level
+kubectl exec -n gitea-system deploy/postgresql -- \
+  psql -U gitea -c "ALTER USER gitea PASSWORD 'new-password';"
+
+# 2. Update POSTGRES_PASSWORD and GITEA_DB_PASSWORD in Infisical UI
+
+# 3. Force ESO reconcile
+kubectl annotate externalsecret postgresql-secret -n gitea-system force-sync=$(date +%s) --overwrite
+
+# 4. Restart Gitea to pick up new GITEA_DB_PASSWORD
+kubectl rollout restart deployment gitea -n gitea-system
+```
 
 ### Resource Limits
 
