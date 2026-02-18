@@ -114,4 +114,8 @@ spec:
                   --must-change-password=false
                 echo "Admin user created."
               fi
+              # Always clear the must-change-password flag — it may be set if the
+              # user was created via the web UI or a prior job run without this step.
+              gitea admin user must-change-password --all --unset
+              echo "must-change-password cleared."
               EOF
