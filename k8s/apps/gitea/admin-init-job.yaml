@@ -14,6 +14,10 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      # gitea/gitea refuses to run as root (UID 0). fsGroup ensures the emptyDir
+      # work volume is writable by GID 1000 even though the initContainer runs as root.
+      securityContext:
+        fsGroup: 1000
       initContainers:
         # Copy app.ini from the ConfigMap into an emptyDir so the gitea CLI can
         # find it at $GITEA_WORK_DIR/conf/app.ini (ConfigMap mounts are read-only).
@@ -33,6 +37,9 @@ spec:
       containers:
         - name: create-admin
           image: gitea/gitea:1.22
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
           env:
             - name: GITEA_WORK_DIR
               value: /work
