@@ -55,7 +55,7 @@ flowchart TD
 | `namespace.yaml` | Dedicated `openclaw` namespace |
 | `pvc.yaml` | 5Gi PVC for state data and agent workspaces |
 | `external-secret.yaml` | Syncs gateway token, API keys, and GitHub token from Infisical → `openclaw-secret` |
-| `configmap.yaml` | Multi-agent `openclaw.json` config (agents, skills, routing) |
+| `configmap.yaml` | Multi-agent `openclaw.json` config (gateway, agents, skills, tools) |
 | `deployment.yaml` | Single-replica deployment with config/skills/workspace volumes |
 | `service.yaml` | NodePort service exposing port 30789 |
 | `rbac.yaml` | ServiceAccount + ClusterRoleBinding (cluster-admin) |
@@ -104,7 +104,7 @@ flowchart LR
 
 ## Agent Git Workflow
 
-All agents enforce a mandatory git workflow for any change to the homelab repository. No agent pushes directly to `main`.
+All agents enforce a mandatory git workflow for any change to the homelab repository. No agent pushes directly to `main`. Branch protection is enforced: PRs require at least one approving review, force pushes are blocked, and linear history is required.
 
 ```mermaid
 sequenceDiagram
@@ -394,6 +394,19 @@ cd homelab
 git submodule update --init
 ```
 
+## Gateway Configuration
+
+The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
+
+| Section | Key | Value | Purpose |
+|---|---|---|---|
+| `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
+| `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
+| `tools.agentToAgent` | `enabled` / `allow` | All 4 agents | Enables inter-agent communication |
+| `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
+| `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
+| `agents.list[].subagents` | `allowAgents` | Per-agent list | Controls which agents each agent can spawn (see Sub-agent spawning below) |
+
 ## Multi-Agent & Skills Architecture
 
 OpenClaw runs four agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
@@ -476,11 +489,12 @@ Sub-agents announce results back up the chain. Configure limits in the ConfigMap
 
 ### Adding a new agent
 
-1. Add the agent entry to `configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
-2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
-3. Add the agent ID to the init container's `for` loop in `deployment.yaml`
-4. Add the agent ID to `tools.agentToAgent.allow` in the config
-5. Push to `main`
+1. Add the agent entry to `configmap.yaml` under `agents.list` — include a `skills` array and a `subagents.allowAgents` list
+2. Add the new agent ID to the orchestrator's `subagents.allowAgents` so it can be spawned
+3. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality (must include mandatory git workflow and agent footprint sections)
+4. Add the agent ID to the init container's `for` loop in `deployment.yaml`
+5. Add the agent ID to `tools.agentToAgent.allow` in the config
+6. Push to `main` via PR (branch protection requires review)
 
 ### Adding a new skill
 

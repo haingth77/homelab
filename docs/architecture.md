@@ -127,10 +127,16 @@ flowchart LR
 
 Every Application CR carries standard `app.kubernetes.io/*` labels (`name`, `part-of`, `component`, `managed-by`). See the [ArgoCD README](../k8s/apps/argocd/README.md#adding-a-new-application) for the full labeling rules and new-application template.
 
+**Branch protection** on `main`:
+- PRs require at least one approving review before merge
+- Force pushes and branch deletion are blocked
+- Linear history is required (no merge commits)
+- Admin bypass is available for emergencies (`enforce_admins: false`)
+
 **Sync policies** on all applications:
 - `automated.prune: true` — resources removed from git are deleted from the cluster
 - `automated.selfHeal: true` — any manual `kubectl` change is reverted within ~3 minutes
-- All applications target `targetRevision: HEAD` — every push to `main` is deployed
+- All applications target `targetRevision: HEAD` — every merge to `main` is deployed
 
 ## Layer 2: Secret Management
 

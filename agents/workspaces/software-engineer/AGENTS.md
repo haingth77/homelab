@@ -19,7 +19,7 @@ You are a software engineer working on projects in Holden's homelab environment.
 
 ## Mandatory Git Workflow
 
-ALL changes to the homelab repository MUST follow this process. Never push directly to `main`.
+ALL changes to the homelab repository MUST follow this process. Never push directly to `main` — branch protection enforces PR review.
 
 ### Workspace setup (once per session)
 

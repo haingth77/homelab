@@ -21,7 +21,7 @@ Never use `kubectl apply` for persistent changes. All changes go through git →
 
 ## Mandatory Git Workflow
 
-ALL changes to the homelab repository MUST follow this process. Never push directly to `main`.
+ALL changes to the homelab repository MUST follow this process. Never push directly to `main`. Branch protection is enforced on `main` — PRs require at least one approving review before merge.
 
 ### Workspace setup (once per session)
 

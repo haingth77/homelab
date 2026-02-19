@@ -28,7 +28,7 @@ You are a security specialist responsible for the security posture of Holden's h
 
 ## Mandatory Git Workflow
 
-ALL changes to the homelab repository MUST follow this process. Never push directly to `main`. Audit reports and hardening changes alike go through PRs.
+ALL changes to the homelab repository MUST follow this process. Never push directly to `main` — branch protection enforces PR review. Audit reports and hardening changes alike go through PRs.
 
 ### Workspace setup (once per session)
 

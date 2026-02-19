@@ -108,7 +108,7 @@ The spawned sub-agent session appears in the UI sidebar. Sub-agents report resul
 
 ### Mandatory Git Workflow
 
-ALL agents enforce a mandatory git workflow for any change to the homelab repository. No agent — including the orchestrator — pushes directly to `main`.
+ALL agents enforce a mandatory git workflow for any change to the homelab repository. No agent — including the orchestrator — pushes directly to `main`. Branch protection is enforced on `main`: PRs require at least one approving review, force pushes are blocked, and linear history is required.
 
 ```mermaid
 sequenceDiagram
@@ -194,8 +194,17 @@ Each agent sets its git identity during workspace setup using `git config user.n
 
 Agent config lives in two places:
 
-- **Identity:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, model, workspace, skills allowlist)
+- **Identity:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, model, workspace, skills allowlist, `subagents.allowAgents`)
 - **Personality:** `agents/workspaces/<id>/AGENTS.md` (single source of truth, copied into pod on every restart)
+
+Key gateway-level settings in `openclaw.json`:
+
+| Setting | Value | Purpose |
+|---|---|---|
+| `gateway.mode` | `"local"` | Enables full gateway functionality |
+| `gateway.trustedProxies` | RFC 1918 ranges | Treats K8s internal traffic as local |
+| `tools.sessions.visibility` | `"all"` | Orchestrator can view sub-agent session history |
+| `tools.agentToAgent.enabled` | `true` | Enables cross-agent communication |
 
 The container image (`Dockerfile.openclaw`) includes ops tools (kubectl, helm, terraform, argocd, jq, git, gh) and the pod runs with a `cluster-admin` ServiceAccount, so agents can execute cluster operations directly.
 
@@ -214,11 +223,12 @@ Cross-cutting skills (e.g. `secret-management`) are shared across agents that ne
 
 ### Adding a New Agent
 
-1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
-2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality (must include the mandatory git workflow section)
-3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
-4. Add the agent ID to `tools.agentToAgent.allow` in the configmap
-5. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array and a `subagents.allowAgents` list
+2. Add the new agent ID to the orchestrator's `subagents.allowAgents` so it can be spawned
+3. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality (must include the mandatory git workflow and agent footprint sections)
+4. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
+5. Add the agent ID to `tools.agentToAgent.allow` in the configmap
+6. Push to `main` via PR (branch protection requires review) and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
 
 ### Sub-agent Spawning
 

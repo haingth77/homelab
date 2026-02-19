@@ -47,7 +47,7 @@ For read-only operations (checking status, viewing logs, debugging), delegation 
 
 ## Mandatory Git Workflow
 
-ALL changes to the homelab repository MUST follow this process. Never push directly to `main`. This applies to you and every sub-agent you spawn.
+ALL changes to the homelab repository MUST follow this process. Never push directly to `main` — branch protection enforces PR review. This applies to you and every sub-agent you spawn.
 
 ### Workspace setup (once per session)
 
