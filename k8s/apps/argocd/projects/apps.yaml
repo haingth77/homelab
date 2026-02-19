@@ -9,11 +9,12 @@ spec:
   description: User-facing applications and services
   sourceRepos:
     - git@github.com:holdennguyen/homelab.git
+    - https://prometheus-community.github.io/helm-charts
   destinations:
     - server: https://kubernetes.default.svc
       namespace: gitea-system
     - server: https://kubernetes.default.svc
-      namespace: kubernetes-dashboard
+      namespace: monitoring
     - server: https://kubernetes.default.svc
       namespace: openclaw
   clusterResourceWhitelist:
@@ -23,3 +24,9 @@ spec:
       kind: ClusterRole
     - group: rbac.authorization.k8s.io
       kind: ClusterRoleBinding
+    - group: monitoring.coreos.com
+      kind: "*"
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration

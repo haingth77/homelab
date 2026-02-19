@@ -15,5 +15,5 @@ resources:
   - applications/external-secrets-config-app.yaml
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
-  - applications/kubernetes-dashboard-app.yaml
+  - applications/monitoring-app.yaml
   - applications/openclaw-app.yaml
