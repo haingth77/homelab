@@ -1,7 +1,0 @@
-id: software-engineer
-name: Software Engineer
-tools:
-  sessions_spawn:
-    allow:
-      - devops-sre
-      - security-analyst

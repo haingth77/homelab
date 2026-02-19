@@ -21,28 +21,40 @@ data:
             "default": true,
             "workspace": "/data/workspaces/homelab-admin",
             "model": "google/gemini-2.5-pro",
-            "skills": ["homelab-admin", "gitops", "secret-management"]
+            "skills": ["homelab-admin", "gitops", "secret-management"],
+            "subagents": {
+              "allowAgents": ["devops-sre", "software-engineer", "security-analyst"]
+            }
           },
           {
             "id": "devops-sre",
             "name": "DevOps SRE",
             "workspace": "/data/workspaces/devops-sre",
             "model": "google/gemini-2.5-pro",
-            "skills": ["devops-sre", "gitops", "secret-management"]
+            "skills": ["devops-sre", "gitops", "secret-management"],
+            "subagents": {
+              "allowAgents": ["software-engineer", "security-analyst"]
+            }
           },
           {
             "id": "software-engineer",
             "name": "Software Engineer",
             "workspace": "/data/workspaces/software-engineer",
             "model": "google/gemini-2.5-pro",
-            "skills": ["software-engineer"]
+            "skills": ["software-engineer"],
+            "subagents": {
+              "allowAgents": ["devops-sre", "security-analyst"]
+            }
           },
           {
             "id": "security-analyst",
             "name": "Security Analyst",
             "workspace": "/data/workspaces/security-analyst",
             "model": "google/gemini-2.5-pro",
-            "skills": ["security-analyst", "secret-management"]
+            "skills": ["security-analyst", "secret-management"],
+            "subagents": {
+              "allowAgents": ["devops-sre", "software-engineer"]
+            }
           }
         ],
         "defaults": {
