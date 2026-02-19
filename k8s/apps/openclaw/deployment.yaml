@@ -92,6 +92,12 @@ spec:
               value: "openclaw-bot"
             - name: GIT_COMMITTER_EMAIL
               value: "openclaw-bot@homelab.local"
+            - name: GIT_CONFIG_COUNT
+              value: "1"
+            - name: GIT_CONFIG_KEY_0
+              value: "credential.helper"
+            - name: GIT_CONFIG_VALUE_0
+              value: "!gh auth git-credential"
           ports:
             - name: http
               containerPort: 18789
