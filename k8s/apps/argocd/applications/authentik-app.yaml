@@ -26,6 +26,15 @@ spec:
           envFrom:
             - secretRef:
                 name: authentik-secret
+          env:
+            - name: AUTHENTIK_POSTGRESQL__HOST
+              value: authentik-postgresql
+            - name: AUTHENTIK_POSTGRESQL__PORT
+              value: "5432"
+            - name: AUTHENTIK_POSTGRESQL__USER
+              value: authentik
+            - name: AUTHENTIK_POSTGRESQL__NAME
+              value: authentik
           affinity:
             podAntiAffinity: none
             nodeAffinity:
