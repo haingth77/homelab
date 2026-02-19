@@ -1,0 +1,38 @@
+---
+description: Kubernetes manifest and ArgoCD conventions
+autoAttach:
+  - "k8s/**"
+---
+
+# Kubernetes & ArgoCD Conventions
+
+## Manifest Structure
+
+Each service lives in `k8s/apps/<service>/` with a `kustomization.yaml` listing its resources. ArgoCD watches these directories via Application CRs in `k8s/apps/argocd/applications/`.
+
+## ArgoCD Application CRs
+
+When creating or editing Application CRs, follow the rules in `k8s/apps/argocd/README.md`:
+
+- Assign to the correct AppProject: `secrets` (secret infra), `data` (databases), `apps` (user-facing services). Never use `default`.
+- Include all four `app.kubernetes.io/*` labels: `name` (matches metadata.name), `part-of` (always `homelab`), `component` (functional role), `managed-by` (always `argocd`).
+- If the destination namespace is not in the project's `destinations`, add it to `k8s/apps/argocd/projects/<project>.yaml`.
+- If deploying cluster-scoped resources (CRDs, ClusterRoles), add them to the project's `clusterResourceWhitelist`.
+- List the Application file in `k8s/apps/argocd/kustomization.yaml`.
+
+## Sync Waves
+
+- Wave -1: AppProjects (must exist before Applications reference them)
+- Wave 0: `external-secrets` (installs CRDs)
+- Wave 1: `external-secrets-config` (applies ClusterSecretStore, needs CRDs from wave 0)
+- Default: all other applications
+
+## Secrets
+
+Never put secret values in manifests. Use an `ExternalSecret` resource that references keys from Infisical. See `skills/secret-management/SKILL.md` for the pattern.
+
+## Kustomize
+
+- Every service directory must have a `kustomization.yaml` with a `resources:` list.
+- Use `namespace.yaml` only when the service owns its namespace creation.
+- Prefer `CreateNamespace=true` in the ArgoCD Application syncOptions unless another app already creates the namespace.

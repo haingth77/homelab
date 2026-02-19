@@ -16,7 +16,7 @@ flowchart TD
             Svc["Service\nNodePort :30789"]
             Deploy["OpenClaw Gateway\nPort :18789"]
             CM["ConfigMap: openclaw-config\nopenclaw.json (multi-agent)"]
-            WSCM["ConfigMap: workspace-init\nAGENTS.md templates"]
+            WSHP["hostPath: agents/workspaces\nAGENTS.md personalities"]
             PVC["PVC: openclaw-data\n5Gi"]
             ES["ExternalSecret:\nopenclaw-secret"]
             K8sSecret["K8s Secret:\nopenclaw-secret"]
@@ -39,7 +39,7 @@ flowchart TD
     TServe --> Svc
     Svc --> Deploy
     CM -- "/config" --> Deploy
-    WSCM -- "init container" --> PVC
+            WSHP -- "init container" --> PVC
     Deploy --> PVC
     ES -- "secretStoreRef" --> CSS
     CSS -- "Universal Auth" --> InfisicalSecrets
@@ -351,7 +351,7 @@ flowchart TD
 | `software-engineer` | Code development, review, testing | `google/gemini-2.5-pro` | `/data/workspaces/software-engineer` |
 | `security-analyst` | Security audits, vulnerability assessment, hardening | `google/gemini-2.5-pro` | `/data/workspaces/security-analyst` |
 
-Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file, bootstrapped on first deploy by the `init-workspaces` init container.
+Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 
 ### Skills
 
@@ -384,9 +384,9 @@ Sub-agents announce results back up the chain. Configure limits in the ConfigMap
 ### Adding a new agent
 
 1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
-2. Add its AGENTS.md to `k8s/apps/openclaw/init-workspaces-configmap.yaml`
-3. Add the agent ID to `allowAgents` and `agentToAgent.allow` in the config
-4. Create its workspace AGENTS.md in `agents/workspaces/<id>/AGENTS.md` (source of truth)
+2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
+3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
+4. Add the agent ID to `allowAgents` and `agentToAgent.allow` in the config
 5. Push to `main`
 
 ### Adding a new skill
@@ -403,8 +403,7 @@ Sub-agents announce results back up the chain. Configure limits in the ConfigMap
 | `k8s/apps/openclaw/pvc.yaml` | 5Gi PVC for state data |
 | `k8s/apps/openclaw/external-secret.yaml` | Syncs secrets from Infisical |
 | `k8s/apps/openclaw/configmap.yaml` | Multi-agent `openclaw.json` configuration |
-| `k8s/apps/openclaw/init-workspaces-configmap.yaml` | AGENTS.md templates for workspace bootstrap |
-| `k8s/apps/openclaw/deployment.yaml` | Gateway deployment with config/skills volumes |
+| `k8s/apps/openclaw/deployment.yaml` | Gateway deployment with config/skills/workspace volumes |
 | `k8s/apps/openclaw/service.yaml` | NodePort 30789 |
 | `k8s/apps/openclaw/kustomization.yaml` | Kustomize resource list |
 | `k8s/apps/argocd/applications/openclaw-app.yaml` | ArgoCD Application CR |

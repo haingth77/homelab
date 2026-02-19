@@ -37,7 +37,8 @@ flowchart TD
 | `namespace.yaml` | Dedicated `openclaw` namespace |
 | `pvc.yaml` | 5Gi persistent volume for OpenClaw state and workspace data |
 | `external-secret.yaml` | Syncs gateway token and API keys from Infisical |
-| `deployment.yaml` | Single-replica deployment with health probes |
+| `configmap.yaml` | Multi-agent `openclaw.json` config (agents, skills, routing) |
+| `deployment.yaml` | Single-replica deployment with config/skills/workspace volumes |
 | `service.yaml` | NodePort service exposing port 30789 |
 | `kustomization.yaml` | Lists all resources |
 
@@ -165,6 +166,46 @@ kubectl exec -n openclaw deploy/openclaw -- node dist/index.js channels status
 # Run diagnostics
 kubectl exec -n openclaw deploy/openclaw -- node dist/index.js doctor
 ```
+
+## Multi-Agent Architecture
+
+The deployment runs four agents, each with its own workspace and personality:
+
+| Agent | Role | Workspace |
+|---|---|---|
+| `homelab-admin` (default) | Orchestrator — coordinates tasks, delegates to sub-agents | `/data/workspaces/homelab-admin` |
+| `devops-sre` | Infrastructure, K8s ops, Terraform, incident response | `/data/workspaces/devops-sre` |
+| `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
+| `security-analyst` | Security audits, vulnerability assessment, hardening | `/data/workspaces/security-analyst` |
+
+Configuration is in `configmap.yaml` (mounted at `/config/openclaw.json`). Agent personalities live in `agents/workspaces/<id>/AGENTS.md` at the repo root and are copied into the pod workspace on every restart by the init container.
+
+Homelab-specific skills are mounted from the host at `/skills` via hostPath. Skill definitions live in `skills/` at the repo root.
+
+### Sub-agent spawning
+
+The `homelab-admin` orchestrator can spawn sub-agents for specialized tasks:
+
+```bash
+# Inside OpenClaw chat, the orchestrator uses sessions_spawn:
+# "Spawn devops-sre to investigate the CrashLoopBackOff in namespace gitea-system"
+```
+
+Sub-agents run in isolated sessions with `maxSpawnDepth: 2` (orchestrator pattern) and announce results back to the main agent.
+
+### Adding a new agent
+
+1. Add the agent to `configmap.yaml` under `agents.list`
+2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
+3. Add the agent ID to the init container's `for` loop in `deployment.yaml`
+4. Add it to `agents.defaults.subagents.allowAgents` and `tools.agentToAgent.allow`
+5. Push to `main`
+
+### Adding a new skill
+
+1. Create `skills/<name>/SKILL.md` with OpenClaw-compatible frontmatter
+2. The skill is auto-loaded via `skills.load.extraDirs` in the config
+3. Push to `main` and restart the pod
 
 ## Troubleshooting
 

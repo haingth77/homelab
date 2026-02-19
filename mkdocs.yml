@@ -42,6 +42,7 @@ nav:
   - Networking: networking.md
   - Bootstrap: bootstrap.md
   - Secret Management: secret-management.md
+  - AI Agents: ai-agents.md
   - Apps:
       - ArgoCD: argocd.md
       - Gitea: gitea.md

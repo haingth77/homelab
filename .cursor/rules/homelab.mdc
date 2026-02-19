@@ -1,0 +1,31 @@
+---
+description: Global homelab context and conventions
+alwaysApply: true
+---
+
+# Homelab Context
+
+This is a GitOps-driven homelab running on a Mac mini M4 with OrbStack Kubernetes, managed by ArgoCD.
+
+## Architecture
+
+- **Layer 0 (Terraform):** Bootstraps ArgoCD, bootstrap secrets, Infisical Application CR. Run once.
+- **Layer 1 (ArgoCD):** App of Apps pattern syncs all services from `k8s/apps/` on every push to `main`.
+- **Layer 2 (Infisical + ESO):** Secrets flow from Infisical → External Secrets Operator → K8s Secrets. Never in git.
+
+## Core Rules
+
+- All persistent cluster changes go through git → ArgoCD sync. Never use `kubectl apply` for long-lived resources.
+- Never commit secrets, API keys, or credentials to git. Use the Infisical → ESO pipeline (see `skills/secret-management/SKILL.md`).
+- ArgoCD Application CRs must follow the project and label conventions in `k8s/apps/argocd/README.md` (projects: `secrets`, `data`, `apps`; labels: `app.kubernetes.io/{name,part-of,component,managed-by}`).
+- Prefer Kustomize over Helm for app workloads. Helm is only used for upstream charts (ESO, Infisical).
+- Documentation lives in `docs/` and is served by MkDocs. Keep docs updated when changing infrastructure.
+
+## Key Paths
+
+- `terraform/` — Layer 0 bootstrap (ArgoCD, credentials)
+- `k8s/apps/` — Layer 1 GitOps manifests (one directory per service)
+- `k8s/apps/argocd/` — App of Apps: AppProjects + Application CRs
+- `skills/` — OpenClaw skills (also useful reference for Cursor)
+- `agents/workspaces/` — OpenClaw agent AGENTS.md personalities
+- `docs/` — MkDocs documentation site

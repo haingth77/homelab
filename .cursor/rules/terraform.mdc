@@ -1,0 +1,30 @@
+---
+description: Terraform bootstrap layer conventions
+autoAttach:
+  - "terraform/**"
+---
+
+# Terraform Conventions
+
+Terraform manages Layer 0 only — the bootstrap layer that creates ArgoCD and initial secrets. After `terraform apply`, day-to-day operations use GitOps (push to `main`).
+
+## What Terraform Owns
+
+- ArgoCD Helm release and configuration
+- Root Application CR (`argocd-apps`) and Infisical Application CR
+- Bootstrap K8s Secrets (Infisical encryption key, auth secret, machine identity)
+- ArgoCD SSH deploy key for the private GitHub repo
+
+## Rules
+
+- Never store plaintext secrets in `.tf` files. All sensitive values go in `terraform.tfvars` (gitignored).
+- All variables with sensitive values must have `sensitive = true` in their declaration.
+- Use `null_resource` + `local-exec` for Application CRs because `kubernetes_manifest` requires the CRD to exist at plan time.
+- Use `--server-side` (and `--force-conflicts` for Infisical) when applying Application CRs via kubectl.
+- The Infisical Application is in Terraform (not App of Apps) because its Helm values embed sensitive DB/Redis passwords from tfvars.
+
+## Variable Naming
+
+- Prefix Infisical-related variables with `infisical_`
+- Prefix ArgoCD-related variables with `argocd_`
+- Use `_password`, `_secret`, `_key` suffixes for sensitive values

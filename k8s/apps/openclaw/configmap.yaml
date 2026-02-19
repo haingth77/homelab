@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-config
+  namespace: openclaw
+  labels:
+    app.kubernetes.io/name: openclaw
+    app.kubernetes.io/instance: openclaw
+data:
+  openclaw.json: |
+    {
+      "agents": {
+        "list": [
+          {
+            "id": "homelab-admin",
+            "name": "Homelab Admin",
+            "default": true,
+            "workspace": "/data/workspaces/homelab-admin",
+            "model": "google/gemini-2.5-pro"
+          },
+          {
+            "id": "devops-sre",
+            "name": "DevOps SRE",
+            "workspace": "/data/workspaces/devops-sre",
+            "model": "google/gemini-2.5-pro"
+          },
+          {
+            "id": "software-engineer",
+            "name": "Software Engineer",
+            "workspace": "/data/workspaces/software-engineer",
+            "model": "google/gemini-2.5-pro"
+          },
+          {
+            "id": "security-analyst",
+            "name": "Security Analyst",
+            "workspace": "/data/workspaces/security-analyst",
+            "model": "google/gemini-2.5-pro"
+          }
+        ],
+        "defaults": {
+          "subagents": {
+            "maxSpawnDepth": 2,
+            "maxConcurrent": 4,
+            "maxChildrenPerAgent": 3,
+            "archiveAfterMinutes": 120,
+            "allowAgents": ["homelab-admin", "devops-sre", "software-engineer", "security-analyst"]
+          }
+        }
+      },
+      "skills": {
+        "load": {
+          "extraDirs": ["/skills"]
+        }
+      },
+      "tools": {
+        "agentToAgent": {
+          "enabled": true,
+          "allow": ["homelab-admin", "devops-sre", "software-engineer", "security-analyst"]
+        }
+      }
+    }

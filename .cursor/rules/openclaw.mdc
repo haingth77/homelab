@@ -1,0 +1,55 @@
+---
+description: OpenClaw agent and skill conventions
+autoAttach:
+  - "k8s/apps/openclaw/**"
+  - "skills/**"
+  - "agents/**"
+---
+
+# OpenClaw Agent & Skill Conventions
+
+OpenClaw runs as a multi-agent AI gateway in the `openclaw` namespace. It uses an orchestrator pattern: `homelab-admin` is the default agent that delegates to specialized sub-agents.
+
+## Agents
+
+Agents are defined in two places:
+- **Config:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, workspace, model)
+- **Personality:** `agents/workspaces/<id>/AGENTS.md` (single source of truth, copied into pod workspace by init container)
+
+Each agent has a dedicated workspace directory on the PVC at `/data/workspaces/<id>/`.
+
+## Skills
+
+Skills live in `skills/` at the repo root and are mounted into the pod at `/skills` via hostPath. They auto-load via `skills.load.extraDirs: ["/skills"]` in the config.
+
+Skill format: `skills/<name>/SKILL.md` with YAML frontmatter:
+```yaml
+---
+name: <skill-name>
+description: <one-line description>
+metadata:
+  openclaw:
+    emoji: "<emoji>"
+    requires: { anyBins: ["kubectl"] }  # optional
+---
+```
+
+## Adding a New Agent
+
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
+2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
+3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
+4. Add the agent ID to `allowAgents` and `agentToAgent.allow` in the configmap
+5. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
+
+## Adding a New Skill
+
+1. Create `skills/<name>/SKILL.md` with the frontmatter above
+2. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
+
+## Sub-agent Spawning
+
+- `maxSpawnDepth: 2` — orchestrator (depth 0) → sub-agents (depth 1) → leaf workers (depth 2)
+- `maxConcurrent: 4` — max parallel sub-agents
+- `maxChildrenPerAgent: 3` — max children per agent session
+- Sub-agents communicate back via `sessions_announce`

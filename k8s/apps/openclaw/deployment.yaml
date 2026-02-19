@@ -18,6 +18,28 @@ spec:
         app.kubernetes.io/name: openclaw
         app.kubernetes.io/instance: openclaw
     spec:
+      initContainers:
+        - name: init-workspaces
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              for agent in homelab-admin devops-sre software-engineer security-analyst; do
+                dir="/data/workspaces/${agent}"
+                mkdir -p "${dir}"
+                src="/workspace-src/${agent}/AGENTS.md"
+                if [ -f "${src}" ]; then
+                  cp "${src}" "${dir}/AGENTS.md"
+                fi
+              done
+              chown -R 1000:1000 /data/workspaces
+          volumeMounts:
+            - name: openclaw-data
+              mountPath: /data
+            - name: workspace-src
+              mountPath: /workspace-src
+              readOnly: true
       containers:
         - name: openclaw
           image: openclaw:latest
@@ -34,6 +56,8 @@ spec:
               value: production
             - name: OPENCLAW_STATE_DIR
               value: /data
+            - name: OPENCLAW_CONFIG_PATH
+              value: /config/openclaw.json
             - name: OPENCLAW_PREFER_PNPM
               value: "1"
             - name: NODE_OPTIONS
@@ -58,6 +82,12 @@ spec:
           volumeMounts:
             - name: openclaw-data
               mountPath: /data
+            - name: openclaw-config
+              mountPath: /config
+              readOnly: true
+            - name: openclaw-skills
+              mountPath: /skills
+              readOnly: true
           resources:
             requests:
               cpu: 250m
@@ -81,3 +111,14 @@ spec:
         - name: openclaw-data
           persistentVolumeClaim:
             claimName: openclaw-data
+        - name: openclaw-config
+          configMap:
+            name: openclaw-config
+        - name: workspace-src
+          hostPath:
+            path: /Users/holden.nguyen/homelab/agents/workspaces
+            type: Directory
+        - name: openclaw-skills
+          hostPath:
+            path: /Users/holden.nguyen/homelab/skills
+            type: Directory
