@@ -110,7 +110,7 @@ All agents enforce a mandatory git workflow for any change to the homelab reposi
 sequenceDiagram
     participant User
     participant HA as homelab-admin<br/>(Orchestrator)
-    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst / qa-tester)
     participant GH as GitHub
     participant Argo as ArgoCD
 
@@ -402,14 +402,14 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 |---|---|---|---|
 | `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
 | `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
-| `tools.agentToAgent` | `enabled` / `allow` | All 4 agents | Enables inter-agent communication |
+| `tools.agentToAgent` | `enabled` / `allow` | All 5 agents | Enables inter-agent communication |
 | `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
 | `agents.list[].subagents` | `allowAgents` | Per-agent list | Controls which agents each agent can spawn (see Sub-agent spawning below) |
 
 ## Multi-Agent & Skills Architecture
 
-OpenClaw runs four agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
+OpenClaw runs five agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
 
 ```mermaid
 flowchart TD
@@ -417,10 +417,12 @@ flowchart TD
     DS["devops-sre\n(Infrastructure)"]
     SE["software-engineer\n(Development)"]
     SA["security-analyst\n(Security)"]
+    QA["qa-tester\n(QA/Testing)"]
 
     HA -- "sessions_spawn" --> DS
     HA -- "sessions_spawn" --> SE
     HA -- "sessions_spawn" --> SA
+    HA -- "sessions_spawn" --> QA
 
     subgraph skills["Skills (/skills)"]
         S1["homelab-admin"]
@@ -429,12 +431,14 @@ flowchart TD
         S4["security-analyst"]
         S5["gitops"]
         S6["secret-management"]
+        S7["qa-tester"]
     end
 
     HA --> S1 & S5 & S6
     DS --> S2 & S5 & S6
     SE --> S3
     SA --> S4 & S6
+    QA --> S7 & S5
 ```
 
 Each agent has a `skills` allowlist in the configmap that restricts which skills it can see (omit = all skills; empty array = none):
@@ -445,6 +449,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `devops-sre` | `devops-sre`, `gitops`, `secret-management` |
 | `software-engineer` | `software-engineer` |
 | `security-analyst` | `security-analyst`, `secret-management` |
+| `qa-tester` | `qa-tester`, `gitops` |
 
 ### Agents
 
@@ -454,6 +459,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `devops-sre` | Infrastructure, K8s ops, Terraform, incident response | `google/gemini-2.5-pro` | `/data/workspaces/devops-sre` |
 | `software-engineer` | Code development, review, testing | `google/gemini-2.5-pro` | `/data/workspaces/software-engineer` |
 | `security-analyst` | Security audits, vulnerability assessment, hardening | `google/gemini-2.5-pro` | `/data/workspaces/security-analyst` |
+| `qa-tester` | Deployment validation, service health testing, regression checks | `google/gemini-2.5-pro` | `/data/workspaces/qa-tester` |
 
 Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 
@@ -465,11 +471,12 @@ Homelab-specific skills live in `skills/` at the repo root and are mounted into 
 
 | Skill | Description |
 |---|---|
-| `homelab-admin` | Cluster operations, service management, GitOps workflow |
-| `devops-sre` | Infrastructure debugging, Terraform, incident response |
-| `software-engineer` | Code development, review, testing conventions |
-| `security-analyst` | Security audits, RBAC review, vulnerability assessment |
-| `gitops` | ArgoCD App of Apps pattern, sync management |
+| `homelab-admin` | Cluster operations, service management, delegation framework, change impact assessment |
+| `devops-sre` | SRE best practices: SLOs, resource management, deployment strategies, runbooks, incident response, monitoring |
+| `software-engineer` | Stack conventions (K8s/Terraform/Docker/Bash), manifest best practices, testing, error handling, dependency management |
+| `security-analyst` | STRIDE threat modeling, CIS hardening, container/image security, RBAC audit, secret lifecycle, supply chain security |
+| `qa-tester` | Test strategy, per-service acceptance criteria, full cluster validation, chaos testing, defect classification |
+| `gitops` | ArgoCD App of Apps pattern, sync management, mandatory git workflow, agent footprint conventions |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
 | `common/Documentation` | Standardized documentation generation |
 

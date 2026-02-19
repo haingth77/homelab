@@ -26,7 +26,7 @@ spec:
             - sh
             - -c
             - |
-              for agent in homelab-admin devops-sre software-engineer security-analyst; do
+              for agent in homelab-admin devops-sre software-engineer security-analyst qa-tester; do
                 dir="/data/workspaces/${agent}"
                 mkdir -p "${dir}"
                 src="/workspace-src/${agent}/AGENTS.md"
