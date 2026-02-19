@@ -16,25 +16,29 @@ data:
             "name": "Homelab Admin",
             "default": true,
             "workspace": "/data/workspaces/homelab-admin",
-            "model": "google/gemini-2.5-pro"
+            "model": "google/gemini-2.5-pro",
+            "skills": ["homelab-admin", "gitops", "secret-management"]
           },
           {
             "id": "devops-sre",
             "name": "DevOps SRE",
             "workspace": "/data/workspaces/devops-sre",
-            "model": "google/gemini-2.5-pro"
+            "model": "google/gemini-2.5-pro",
+            "skills": ["devops-sre", "gitops", "secret-management"]
           },
           {
             "id": "software-engineer",
             "name": "Software Engineer",
             "workspace": "/data/workspaces/software-engineer",
-            "model": "google/gemini-2.5-pro"
+            "model": "google/gemini-2.5-pro",
+            "skills": ["software-engineer"]
           },
           {
             "id": "security-analyst",
             "name": "Security Analyst",
             "workspace": "/data/workspaces/security-analyst",
-            "model": "google/gemini-2.5-pro"
+            "model": "google/gemini-2.5-pro",
+            "skills": ["security-analyst", "secret-management"]
           }
         ],
         "defaults": {

@@ -34,9 +34,15 @@ metadata:
 ---
 ```
 
+## Per-Agent Skill Assignment
+
+Each agent has a `skills` allowlist in the configmap that restricts which skills it can see. Omitting `skills` = all skills; `skills: []` = none.
+
+Assign only skills relevant to the agent's role. Cross-cutting skills (e.g. `secret-management`) can be shared across agents that need them.
+
 ## Adding a New Agent
 
-1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
 4. Add the agent ID to `tools.agentToAgent.allow` in the configmap
@@ -45,7 +51,8 @@ metadata:
 ## Adding a New Skill
 
 1. Create `skills/<name>/SKILL.md` with the frontmatter above
-2. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
+2. Add the skill name to the `skills` array of each agent that should use it in the configmap
+3. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
 
 ## Sub-agent Spawning
 
