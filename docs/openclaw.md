@@ -70,7 +70,7 @@ flowchart LR
 
     subgraph appsProj["apps project"]
         Gitea["gitea"]
-        Dash["kubernetes-dashboard"]
+        Mon["monitoring"]
         OC["openclaw"]
     end
 

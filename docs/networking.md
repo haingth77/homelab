@@ -39,8 +39,8 @@ flowchart TD
                 GiteaSvc["gitea\nNodePort 30300/30022"]
                 PgSvc["postgresql\nClusterIP 5432"]
             end
-            subgraph dashNs["kubernetes-dashboard namespace"]
-                DashSvc["kubernetes-dashboard\nNodePort 30444"]
+            subgraph monNs["monitoring namespace"]
+                GrafanaSvc["grafana\nNodePort 30090"]
             end
             subgraph infisicalNs["infisical namespace"]
                 InfisicalSvc["infisical\nNodePort 30445"]
@@ -49,7 +49,7 @@ flowchart TD
 
         TLS443 -- "http://localhost:30300" --> GiteaSvc
         TLS8443 -- "http://localhost:30080" --> ArgoCDSvc
-        TLS8444 -- "https+insecure://localhost:30444" --> DashSvc
+        TLS8444 -- "http://localhost:30090" --> GrafanaSvc
         TLS8445["HTTPS :8445\nauto Let's Encrypt cert"] -- "http://localhost:30445" --> InfisicalSvc
     end
 
@@ -129,7 +129,7 @@ Running in `--insecure` mode means ArgoCD terminates TLS at the Tailscale Serve 
 | Gitea HTTP | 3000 | 30300 | `http://localhost:30300` |
 | Gitea SSH | 22 | 30022 | `ssh://localhost:30022` |
 | ArgoCD HTTP | 8080 | 30080 | `http://localhost:30080` |
-| K8s Dashboard | 8443 | 30444 | `https://localhost:30444` |
+| Grafana | 3000 | 30090 | `http://localhost:30090` |
 | Infisical | 8080 | 30445 | `http://localhost:30445` |
 | PostgreSQL (Gitea) | 5432 | — | ClusterIP only (no external access) |
 
@@ -146,8 +146,8 @@ tailscale serve --bg http://localhost:30300
 # ArgoCD -- custom HTTPS port (8443); ArgoCD runs in insecure mode so plain HTTP
 tailscale serve --bg --https 8443 http://localhost:30080
 
-# Kubernetes Dashboard -- custom HTTPS port (8444); dashboard uses self-signed cert
-tailscale serve --bg --https 8444 https+insecure://localhost:30444
+# Grafana -- custom HTTPS port (8444)
+tailscale serve --bg --https 8444 http://localhost:30090
 
 # Infisical -- custom HTTPS port (8445)
 tailscale serve --bg --https 8445 http://localhost:30445
@@ -171,14 +171,14 @@ flowchart LR
     subgraph k8s["Kubernetes"]
         Gitea["Gitea :3000\nplain HTTP"]
         ArgoCD["ArgoCD :8080\nself-signed HTTPS"]
-        Dashboard["Dashboard :8443\nself-signed HTTPS"]
+        Grafana["Grafana :3000\nplain HTTP"]
     end
 
     Browser -- "TLS 1.3\nvalid cert" --> Cert
     Cert --> Proxy
     Proxy -- "plain HTTP" --> Gitea
     Proxy -- "HTTPS\nskip cert verify" --> ArgoCD
-    Proxy -- "HTTPS\nskip cert verify" --> Dashboard
+    Proxy -- "plain HTTP" --> Grafana
 ```
 
 Tailscale automatically provisions and renews Let's Encrypt certificates for the `*.ts.net` domain. No manual certificate management, no cert-manager, no self-signed certs.
@@ -195,7 +195,7 @@ https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
 |-- / proxy http://localhost:30080
 
 https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
-|-- / proxy https+insecure://localhost:30444
+|-- / proxy http://localhost:30090
 
 https://holdens-mac-mini.story-larch.ts.net:8445 (tailnet only)
 |-- / proxy http://localhost:30445
@@ -210,7 +210,7 @@ tailscale serve --https=443 off
 # Stop ArgoCD proxy
 tailscale serve --https=8443 off
 
-# Stop Dashboard proxy
+# Stop Grafana proxy
 tailscale serve --https=8444 off
 
 # Reset all serve config
@@ -235,7 +235,7 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 |---------|-----|------|
 | Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) |
 | ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
-| K8s Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
+| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
 | Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
 
 ### Tailscale Serve vs Funnel
@@ -281,7 +281,7 @@ flowchart TD
 
     subgraph tailnet["Tailscale Tailnet (story-larch)"]
         subgraph mac["Mac mini M4\n100.77.144.4"]
-            TS["tailscale serve\n:443, :8443, :8444"]
+            TS["tailscale serve\n:443, :8443, :8444, :8445, :8446"]
 
             subgraph orb["OrbStack Kubernetes"]
                 subgraph argocd["argocd ns"]
@@ -294,8 +294,8 @@ flowchart TD
                     PgSvc["postgresql :5432"]
                     PgPod["PostgreSQL"]
                 end
-                subgraph dash["kubernetes-dashboard ns"]
-                    DashSvc["kubernetes-dashboard\nNodePort 30444"]
+                subgraph monNs2["monitoring ns"]
+                    GrafanaSvc2["grafana\nNodePort 30090"]
                 end
                 subgraph infisical_ns["infisical ns"]
                     InfisicalSvc2["infisical\nNodePort 30445"]
@@ -304,7 +304,7 @@ flowchart TD
 
             TS -- "localhost:30300" --> GiteaSvc
             TS -- "localhost:30080" --> ArgoSvc
-            TS -- "localhost:30444" --> DashSvc
+            TS -- "localhost:30090" --> GrafanaSvc2
             TS -- "localhost:30445" --> InfisicalSvc2
             GiteaSvc --> GiteaPod
             GiteaPod --> PgSvc

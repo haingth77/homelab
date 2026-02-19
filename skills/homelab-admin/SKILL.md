@@ -38,7 +38,7 @@ The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-la
 | Service | Tailscale URL | NodePort | Proxy target |
 |---|---|---|---|
 | ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 30080 | `http://localhost:30080` |
-| K8s Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8444` | 30444 | `https+insecure://localhost:30444` |
+| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | 30090 | `http://localhost:30090` |
 | Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 30445 | `http://localhost:30445` |
 | OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8446` | 30789 | `http://localhost:30789` |
 | Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 30300 | `http://localhost:30300` |
@@ -60,7 +60,7 @@ The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-la
 | `external-secrets` | ESO operator, cert-controller, webhook |
 | `gitea-system` | Gitea, PostgreSQL (Gitea's DB) |
 | `infisical` | Infisical standalone, PostgreSQL, Redis, ingress-nginx |
-| `kubernetes-dashboard` | Dashboard web UI, metrics-scraper |
+| `monitoring` | Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics |
 | `openclaw` | OpenClaw gateway (this pod) |
 
 ## ArgoCD applications
@@ -72,7 +72,7 @@ The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-la
 | `external-secrets-config` | `secrets` | ClusterSecretStore for Infisical — sync wave 1 |
 | `infisical` | `secrets` | Infisical secret manager (managed by Terraform, not App of Apps) |
 | `gitea` | `apps` | Gitea git forge |
-| `kubernetes-dashboard` | `apps` | K8s Dashboard web UI |
+| `monitoring` | `apps` | kube-prometheus-stack (Prometheus + Grafana + Alertmanager) |
 | `openclaw` | `apps` | OpenClaw AI gateway (this service) |
 | `postgresql` | `data` | PostgreSQL for Gitea |
 

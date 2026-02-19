@@ -22,7 +22,7 @@ flowchart TD
         C --> G["Application: external-secrets-config"]
         C --> H["Application: postgresql"]
         C --> I["Application: gitea"]
-        C --> J["Application: kubernetes-dashboard"]
+        C --> J["Application: monitoring"]
         D --> E
     end
 
@@ -74,7 +74,7 @@ Applications are organized into three **AppProjects** that scope which repos, na
 |---|---|---|
 | `secrets` | Secret management infrastructure | `infisical`, `external-secrets`, `external-secrets-config` |
 | `data` | Databases and data stores | `postgresql` |
-| `apps` | User-facing applications | `gitea`, `kubernetes-dashboard`, `openclaw` |
+| `apps` | User-facing applications | `gitea`, `monitoring`, `openclaw` |
 | `default` | Bootstrap only | `argocd-apps` (root) |
 
 ```mermaid
@@ -85,7 +85,7 @@ flowchart LR
         ESDir["k8s/apps/external-secrets/"]
         PGDir["k8s/apps/postgresql/"]
         GiteaDir["k8s/apps/gitea/"]
-        DashDir["k8s/apps/kubernetes-dashboard/"]
+        MonDir["k8s/apps/argocd/applications/\nmonitoring-app.yaml (Helm)"]
         OCDir["k8s/apps/openclaw/"]
     end
 
@@ -104,7 +104,7 @@ flowchart LR
 
         subgraph appsProj["apps project"]
             GiteaApp["gitea"]
-            DashApp["kubernetes-dashboard"]
+            MonApp["monitoring"]
             OCApp["openclaw"]
         end
     end
@@ -118,7 +118,7 @@ flowchart LR
     ESCApp -- "syncs" --> ESDir
     PGApp -- "syncs" --> PGDir
     GiteaApp -- "syncs" --> GiteaDir
-    DashApp -- "syncs" --> DashDir
+    MonApp -- "syncs Helm chart" --> MonChart["prometheus-community\nHelm repo"]
     OCApp -- "syncs" --> OCDir
     InfisicalApp -- "syncs Helm chart" --> InfisicalChart["cloudsmith Helm repo"]
 ```
@@ -192,8 +192,10 @@ flowchart TD
         GiteaPod -- "postgresql:5432" --> PGPod
     end
 
-    subgraph dashNs["kubernetes-dashboard namespace"]
-        DashPod["Dashboard\nNodePort :30444"]
+    subgraph monNs["monitoring namespace"]
+        GrafanaPod["Grafana\nNodePort :30090"]
+        PromPod["Prometheus\n15d retention"]
+        GrafanaPod --> PromPod
     end
 
     subgraph openclawNs["openclaw namespace"]
@@ -216,7 +218,7 @@ Services are exposed through **Tailscale Serve**, which provides automatic TLS c
 |---|---|---|---|
 | ArgoCD | `:30080` (HTTP) | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
 | Gitea | `:30300` | `https://holdens-mac-mini.story-larch.ts.net` | 443 |
-| K8s Dashboard | `:30444` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
+| Grafana | `:30090` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
 | Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
 | OpenClaw | `:30789` | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 |
 
@@ -256,7 +258,7 @@ homelab/
 │       ├── external-secrets/       # ClusterSecretStore
 │       ├── infisical/              # (Helm chart managed by Terraform-created Application)
 │       ├── gitea/                  # Gitea kustomize manifests + ExternalSecret
-│       ├── kubernetes-dashboard/   # Dashboard kustomize manifests
+│       ├── (monitoring deployed via Helm chart — see monitoring-app.yaml)
 │       ├── openclaw/               # OpenClaw AI gateway manifests
 │       └── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
 └── docs/                           # Extended documentation

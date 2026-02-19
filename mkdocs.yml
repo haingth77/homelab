@@ -49,5 +49,5 @@ nav:
       - PostgreSQL: postgresql.md
       - External Secrets: external-secrets.md
       - Infisical: infisical.md
-      - Kubernetes Dashboard: kubernetes-dashboard.md
+      - Monitoring: monitoring.md
       - OpenClaw: openclaw.md
