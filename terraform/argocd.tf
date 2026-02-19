@@ -84,9 +84,10 @@ locals {
       name      = "infisical"
       namespace = "argocd"
       labels = {
-        "app.kubernetes.io/part-of" = "homelab"
-        "homelab/tier"              = "infrastructure"
-        "homelab/category"          = "secrets"
+        "app.kubernetes.io/name"       = "infisical"
+        "app.kubernetes.io/part-of"    = "homelab"
+        "app.kubernetes.io/component"  = "secrets"
+        "app.kubernetes.io/managed-by" = "argocd"
       }
       annotations = {
         "argocd.argoproj.io/sync-wave" = "0"
@@ -205,9 +206,10 @@ locals {
       name      = "argocd-apps"
       namespace = "argocd"
       labels = {
-        "app.kubernetes.io/part-of" = "homelab"
-        "homelab/tier"              = "infrastructure"
-        "homelab/category"          = "gitops"
+        "app.kubernetes.io/name"       = "argocd-apps"
+        "app.kubernetes.io/part-of"    = "homelab"
+        "app.kubernetes.io/component"  = "gitops"
+        "app.kubernetes.io/managed-by" = "argocd"
       }
     }
     spec = {

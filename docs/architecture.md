@@ -66,7 +66,16 @@ Every `kubectl apply` invocation is an untracked side-effect. Terraform tracks a
 
 ## Layer 1: ArgoCD (App of Apps)
 
-ArgoCD watches the GitHub repository and applies any changes to `k8s/apps/` automatically. The pattern used is **App of Apps**: one root Application (`argocd-apps`) points to `k8s/apps/argocd/`, which contains the Application CRs for every other service.
+ArgoCD watches the GitHub repository and applies any changes to `k8s/apps/` automatically. The pattern used is **App of Apps**: one root Application (`argocd-apps`) points to `k8s/apps/argocd/`, which contains AppProject and Application CRs for every other service.
+
+Applications are organized into three **AppProjects** that scope which repos, namespaces, and cluster-scoped resources each group of apps can access:
+
+| Project | Purpose | Applications |
+|---|---|---|
+| `secrets` | Secret management infrastructure | `infisical`, `external-secrets`, `external-secrets-config` |
+| `data` | Databases and data stores | `postgresql` |
+| `apps` | User-facing applications | `gitea`, `kubernetes-dashboard`, `openclaw` |
+| `default` | Bootstrap only | `argocd-apps` (root) |
 
 ```mermaid
 flowchart LR
@@ -77,32 +86,44 @@ flowchart LR
         PGDir["k8s/apps/postgresql/"]
         GiteaDir["k8s/apps/gitea/"]
         DashDir["k8s/apps/kubernetes-dashboard/"]
+        OCDir["k8s/apps/openclaw/"]
     end
 
     subgraph argocd["ArgoCD (argocd namespace)"]
-        RootApp["argocd-apps\n(created by Terraform)"]
-        InfisicalApp["infisical\n(created by Terraform)"]
-        ESOApp["external-secrets"]
-        ESCApp["external-secrets-config"]
-        PGApp["postgresql"]
-        GiteaApp["gitea"]
-        DashApp["kubernetes-dashboard"]
+        RootApp["argocd-apps\n(default project)"]
+
+        subgraph secretsProj["secrets project"]
+            InfisicalApp["infisical\n(Terraform-managed)"]
+            ESOApp["external-secrets"]
+            ESCApp["external-secrets-config"]
+        end
+
+        subgraph dataProj["data project"]
+            PGApp["postgresql"]
+        end
+
+        subgraph appsProj["apps project"]
+            GiteaApp["gitea"]
+            DashApp["kubernetes-dashboard"]
+            OCApp["openclaw"]
+        end
     end
 
     RootApp -- "syncs" --> RootDir
-    RootDir -- "creates" --> ESOApp
-    RootDir -- "creates" --> ESCApp
-    RootDir -- "creates" --> PGApp
-    RootDir -- "creates" --> GiteaApp
-    RootDir -- "creates" --> DashApp
+    RootDir -- "creates" --> secretsProj
+    RootDir -- "creates" --> dataProj
+    RootDir -- "creates" --> appsProj
 
-    ESOApp -- "syncs Helm chart" --> ESODir["charts.external-secrets.io"]
+    ESOApp -- "syncs Helm chart" --> ESOChart["charts.external-secrets.io"]
     ESCApp -- "syncs" --> ESDir
     PGApp -- "syncs" --> PGDir
     GiteaApp -- "syncs" --> GiteaDir
     DashApp -- "syncs" --> DashDir
+    OCApp -- "syncs" --> OCDir
     InfisicalApp -- "syncs Helm chart" --> InfisicalChart["cloudsmith Helm repo"]
 ```
+
+Every Application CR carries standard `app.kubernetes.io/*` labels (`name`, `part-of`, `component`, `managed-by`). See the [ArgoCD README](../k8s/apps/argocd/README.md#adding-a-new-application) for the full labeling rules and new-application template.
 
 **Sync policies** on all applications:
 - `automated.prune: true` — resources removed from git are deleted from the cluster
@@ -175,10 +196,15 @@ flowchart TD
         DashPod["Dashboard\nNodePort :30444"]
     end
 
+    subgraph openclawNs["openclaw namespace"]
+        OpenClawPod["OpenClaw Gateway\nNodePort :30789"]
+    end
+
     ESOPod --> CSS
     CSS -- "Universal Auth" --> InfisicalPod
     CSS -- "ExternalSecret" --> GiteaPod
     CSS -- "ExternalSecret" --> PGPod
+    CSS -- "ExternalSecret" --> OpenClawPod
     ArgoController -- "poll git" --> GitHub["GitHub\nholdennguyen/homelab"]
 ```
 
@@ -192,6 +218,7 @@ Services are exposed through **Tailscale Serve**, which provides automatic TLS c
 | Gitea | `:30300` | `https://holdens-mac-mini.story-larch.ts.net` | 443 |
 | K8s Dashboard | `:30444` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
 | Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
+| OpenClaw | `:30789` | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 |
 
 For the full networking reference, see [docs/networking.md](./networking.md).
 
@@ -223,11 +250,14 @@ homelab/
 │   └── terraform.tfvars.example   # Template — copy to terraform.tfvars
 ├── k8s/                            # Layer 1 — GitOps manifests
 │   └── apps/
-│       ├── argocd/                 # App of Apps kustomization + Application CRs
+│       ├── argocd/                 # App of Apps: AppProjects + Application CRs
+│       │   ├── projects/           # AppProject CRs (secrets, data, apps)
+│       │   └── applications/       # Application CRs
 │       ├── external-secrets/       # ClusterSecretStore
 │       ├── infisical/              # (Helm chart managed by Terraform-created Application)
 │       ├── gitea/                  # Gitea kustomize manifests + ExternalSecret
 │       ├── kubernetes-dashboard/   # Dashboard kustomize manifests
+│       ├── openclaw/               # OpenClaw AI gateway manifests
 │       └── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
 └── docs/                           # Extended documentation
     ├── architecture.md             # This file

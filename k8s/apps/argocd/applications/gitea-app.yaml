@@ -4,9 +4,10 @@ metadata:
   name: gitea
   namespace: argocd
   labels:
+    app.kubernetes.io/name: gitea
     app.kubernetes.io/part-of: homelab
-    homelab/tier: app
-    homelab/category: git
+    app.kubernetes.io/component: git
+    app.kubernetes.io/managed-by: argocd
 spec:
   project: apps
   source:

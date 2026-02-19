@@ -4,9 +4,10 @@ metadata:
   name: kubernetes-dashboard
   namespace: argocd
   labels:
+    app.kubernetes.io/name: kubernetes-dashboard
     app.kubernetes.io/part-of: homelab
-    homelab/tier: app
-    homelab/category: dashboard
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
 spec:
   project: apps
   source:

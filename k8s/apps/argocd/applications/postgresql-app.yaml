@@ -4,9 +4,10 @@ metadata:
   name: postgresql
   namespace: argocd
   labels:
+    app.kubernetes.io/name: postgresql
     app.kubernetes.io/part-of: homelab
-    homelab/tier: data
-    homelab/category: database
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: argocd
 spec:
   project: data
   source:

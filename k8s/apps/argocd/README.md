@@ -40,49 +40,60 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `kustomization.yaml` | Lists Application CRs managed by the App of Apps |
+| `kustomization.yaml` | Lists AppProjects and Application CRs managed by the App of Apps |
+| `projects/secrets.yaml` | AppProject for secret management infrastructure |
+| `projects/data.yaml` | AppProject for databases and data stores |
+| `projects/apps.yaml` | AppProject for user-facing applications |
 | `applications/external-secrets-app.yaml` | ESO Helm chart (sync-wave 0 — installs CRDs first) |
 | `applications/external-secrets-config-app.yaml` | ClusterSecretStore (sync-wave 1 — after ESO CRDs) |
 | `applications/postgresql-app.yaml` | PostgreSQL deployment in `gitea-system` namespace |
 | `applications/gitea-app.yaml` | Gitea deployment in `gitea-system` namespace |
 | `applications/kubernetes-dashboard-app.yaml` | Kubernetes Dashboard deployment |
+| `applications/openclaw-app.yaml` | OpenClaw AI gateway deployment |
 
 > **Note:** The `infisical` Application CR is **not** in this directory. It is created by `terraform/argocd.tf` because its Helm values include sensitive PostgreSQL and Redis passwords that cannot be stored in git.
 
 ## App of Apps Pattern
 
-The root Application (`argocd-apps`) watches `k8s/apps/argocd/`. Any Application CR added to that directory (and listed in `kustomization.yaml`) is automatically deployed by ArgoCD.
+The root Application (`argocd-apps`) watches `k8s/apps/argocd/`. Any AppProject or Application CR added to that directory (and listed in `kustomization.yaml`) is automatically deployed by ArgoCD.
 
 ```mermaid
 flowchart LR
-    subgraph root["argocd-apps (root Application)"]
-        Kustomize["kustomization.yaml\n→ lists Application CRs"]
+    subgraph root["argocd-apps (root Application, default project)"]
+        Kustomize["kustomization.yaml"]
     end
 
-    subgraph apps["Child Applications (in argocd namespace)"]
+    subgraph secretsProj["secrets project"]
+        Infisical["infisical\n(Terraform-managed)"]
         A1["external-secrets\n(sync-wave 0)"]
         A2["external-secrets-config\n(sync-wave 1)"]
-        A3["postgresql"]
-        A4["gitea"]
-        A5["kubernetes-dashboard"]
     end
 
-    Kustomize --> A1
-    Kustomize --> A2
-    Kustomize --> A3
-    Kustomize --> A4
-    Kustomize --> A5
+    subgraph dataProj["data project"]
+        A3["postgresql"]
+    end
+
+    subgraph appsProj["apps project"]
+        A4["gitea"]
+        A5["kubernetes-dashboard"]
+        A6["openclaw"]
+    end
+
+    Kustomize --> secretsProj
+    Kustomize --> dataProj
+    Kustomize --> appsProj
 ```
 
 ## Sync Wave Ordering
 
-The `external-secrets` and `external-secrets-config` applications use sync waves to handle the CRD dependency:
+Sync waves control the order in which resources are applied. AppProjects must exist before Applications reference them.
 
-| Wave | Application | Why |
+| Wave | Resource | Why |
 |---|---|---|
+| -1 | AppProjects (`secrets`, `data`, `apps`) | Must exist before any Application references them |
 | 0 | `external-secrets` | Installs the ESO Helm chart + CRDs (`ExternalSecret`, `ClusterSecretStore`, etc.) |
 | 1 | `external-secrets-config` | Applies the `ClusterSecretStore` — requires CRDs from wave 0 to be present |
-| (default) | `postgresql`, `gitea`, `kubernetes-dashboard` | No ordering requirements between them |
+| (default) | `postgresql`, `gitea`, `kubernetes-dashboard`, `openclaw` | No ordering requirements between them |
 
 ## ArgoCD Configuration
 
@@ -109,7 +120,33 @@ The SSH key is stored in `terraform/terraform.tfvars` (gitignored) and injected 
 
 ## Adding a New Application
 
-To deploy a new service via ArgoCD:
+### Projects
+
+Every Application must belong to an AppProject. Pick the project that matches the service's role:
+
+| Project | Purpose | When to use |
+|---|---|---|
+| `secrets` | Secret management infrastructure | Secret stores, secret operators, certificate managers |
+| `data` | Databases and persistent data stores | PostgreSQL, Redis, object storage, message queues |
+| `apps` | User-facing applications and services | Web apps, APIs, dashboards, developer tools |
+| `default` | Bootstrap only | **Reserved** for the `argocd-apps` root Application |
+
+If a new application's destination namespace is not already listed in the project's `destinations`, add it to the corresponding `projects/*.yaml` file. Similarly, if it deploys cluster-scoped resources (CRDs, ClusterRoles, etc.), add them to `clusterResourceWhitelist`.
+
+### Labels
+
+Every Application CR **must** carry these four standard Kubernetes labels:
+
+| Label | Value | Rule |
+|---|---|---|
+| `app.kubernetes.io/name` | Application name | Must match `metadata.name` |
+| `app.kubernetes.io/part-of` | `homelab` | Always `homelab` |
+| `app.kubernetes.io/component` | Functional role | One of: `secrets`, `database`, `git`, `dashboard`, `ai`, `gitops`, or a new descriptive value |
+| `app.kubernetes.io/managed-by` | `argocd` | Always `argocd` |
+
+Do not add custom-prefixed labels (e.g., `homelab/*`). Use only `app.kubernetes.io/*` labels to stay consistent with the Kubernetes recommended labels convention.
+
+### Template
 
 1. Create a directory `k8s/apps/my-service/` with `kustomization.yaml` and resource manifests
 2. Create `k8s/apps/argocd/applications/my-service-app.yaml`:
@@ -120,8 +157,13 @@ kind: Application
 metadata:
   name: my-service
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: my-service
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: <component>    # e.g. database, monitoring
+    app.kubernetes.io/managed-by: argocd
 spec:
-  project: default
+  project: <project>                            # secrets | data | apps
   source:
     repoURL: git@github.com:holdennguyen/homelab.git
     targetRevision: HEAD
@@ -137,14 +179,24 @@ spec:
       - CreateNamespace=true
 ```
 
-3. Add it to `k8s/apps/argocd/kustomization.yaml`:
+3. If the destination namespace is not in the project's `destinations`, add it to the project file in `projects/`
+4. Add the Application to `k8s/apps/argocd/kustomization.yaml`:
 
 ```yaml
 resources:
   - applications/my-service-app.yaml
 ```
 
-4. Push to `main`. ArgoCD detects the change within ~3 minutes and deploys.
+5. Push to `main`. ArgoCD detects the change within ~3 minutes and deploys.
+
+### Checklist
+
+- [ ] `metadata.name` matches the service name
+- [ ] `metadata.labels` includes all four `app.kubernetes.io/*` labels
+- [ ] `spec.project` is set to `secrets`, `data`, or `apps` (never `default`)
+- [ ] Destination namespace is allowed in the project's `destinations`
+- [ ] Any cluster-scoped resources are allowed in the project's `clusterResourceWhitelist`
+- [ ] Application file is listed in `kustomization.yaml`
 
 ## Accessing the UI
 
