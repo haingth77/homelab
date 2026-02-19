@@ -1,0 +1,7 @@
+id: security-analyst
+name: Security Analyst
+tools:
+  sessions_spawn:
+    allow:
+      - devops-sre
+      - software-engineer

@@ -1,0 +1,8 @@
+id: homelab-admin
+name: Homelab Admin
+tools:
+  sessions_spawn:
+    allow:
+      - security-analyst
+      - devops-sre
+      - software-engineer

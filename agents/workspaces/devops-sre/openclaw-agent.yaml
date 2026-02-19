@@ -1,0 +1,7 @@
+id: devops-sre
+name: DevOps SRE
+tools:
+  sessions_spawn:
+    allow:
+      - software-engineer
+      - security-analyst

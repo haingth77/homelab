@@ -29,10 +29,12 @@ spec:
               for agent in homelab-admin devops-sre software-engineer security-analyst; do
                 dir="/data/workspaces/${agent}"
                 mkdir -p "${dir}"
-                src="/workspace-src/${agent}/AGENTS.md"
-                if [ -f "${src}" ]; then
-                  cp "${src}" "${dir}/AGENTS.md"
-                fi
+                for file in AGENTS.md openclaw-agent.yaml; do
+                  src="/workspace-src/${agent}/${file}"
+                  if [ -f "${src}" ]; then
+                    cp "${src}" "${dir}/${file}"
+                  fi
+                done
               done
               chown -R 1000:1000 /data/workspaces
           volumeMounts:
