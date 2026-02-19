@@ -6,7 +6,7 @@ metadata:
     "openclaw":
       {
         "emoji": "🏠",
-        "requires": { "anyBins": ["kubectl", "terraform"] },
+        "requires": { "anyBins": ["kubectl"] },
       },
   }
 ---
@@ -17,56 +17,145 @@ Orchestrate and manage the homelab Kubernetes cluster running on OrbStack (Mac m
 
 ## Cluster overview
 
-- **Runtime:** OrbStack Kubernetes (single-node, Mac mini M4)
-- **GitOps:** ArgoCD polls `github.com/holdennguyen/homelab` and syncs `k8s/apps/`
-- **Secrets:** Infisical → External Secrets Operator → K8s Secrets
-- **Networking:** NodePort + Tailscale Serve (auto TLS)
-- **Manifests:** Kustomize (no Helm for app workloads)
+- **Host:** Mac mini M4, macOS, arm64
+- **Runtime:** OrbStack Kubernetes (single-node), Kubernetes v1.33, node name `orbstack`
+- **GitOps:** ArgoCD (App of Apps pattern) syncs from `github.com/holdennguyen/homelab`, branch `main`, path `k8s/apps/`
+- **Secrets:** Infisical → External Secrets Operator → K8s Secrets (never in git)
+- **Networking:** NodePort (localhost only) + Tailscale Serve (auto TLS via Let's Encrypt)
+- **Manifests:** Kustomize for app workloads; Helm only for upstream charts (ESO, Infisical)
+- **Storage:** `local-path` provisioner (OrbStack default)
+- **Container image:** OpenClaw runs a custom image (`openclaw:latest`) built with `Dockerfile.openclaw`, which includes kubectl, helm, terraform, argocd, jq
+- **Pod RBAC:** This pod runs with a `cluster-admin` ServiceAccount — you have full cluster access
 
-## Services
+## Tailscale network
 
-| Service | Namespace | NodePort | Tailscale |
+The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-larch.ts.net`. All services are accessible via HTTPS with auto-provisioned Let's Encrypt certificates.
+
+**Tailscale IP:** `100.77.144.4`
+
+### Service endpoints
+
+| Service | Tailscale URL | NodePort | Proxy target |
 |---|---|---|---|
-| ArgoCD | `argocd` | 30080 | :8443 |
-| Infisical | `infisical` | 30445 | :8445 |
-| Gitea | `gitea-system` | 30300 | :443 |
-| PostgreSQL | `gitea-system` | internal | internal |
-| K8s Dashboard | `kubernetes-dashboard` | 30444 | :8444 |
-| OpenClaw | `openclaw` | 30789 | :8446 |
+| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 30080 | `http://localhost:30080` |
+| K8s Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8444` | 30444 | `https+insecure://localhost:30444` |
+| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 30445 | `http://localhost:30445` |
+| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8446` | 30789 | `http://localhost:30789` |
+| Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 30300 | `http://localhost:30300` |
+| Gitea SSH | N/A (TCP) | 30022 | SSH |
+
+### Tailnet devices
+
+| Device | IP | OS |
+|---|---|---|
+| holdens-mac-mini | 100.77.144.4 | macOS |
+| iphone-12-pro-max | 100.67.153.52 | iOS |
+| ipad-mini-gen-5 | 100.121.193.73 | iOS |
+
+## Namespaces
+
+| Namespace | Services |
+|---|---|
+| `argocd` | ArgoCD server, repo-server, application-controller, redis, dex, notifications |
+| `external-secrets` | ESO operator, cert-controller, webhook |
+| `gitea-system` | Gitea, PostgreSQL (Gitea's DB) |
+| `infisical` | Infisical standalone, PostgreSQL, Redis, ingress-nginx |
+| `kubernetes-dashboard` | Dashboard web UI, metrics-scraper |
+| `openclaw` | OpenClaw gateway (this pod) |
+
+## ArgoCD applications
+
+| Application | Project | Description |
+|---|---|---|
+| `argocd-apps` | `default` | Root App of Apps — syncs all other Application CRs |
+| `external-secrets` | `secrets` | ESO Helm chart (installs CRDs) — sync wave 0 |
+| `external-secrets-config` | `secrets` | ClusterSecretStore for Infisical — sync wave 1 |
+| `infisical` | `secrets` | Infisical secret manager (managed by Terraform, not App of Apps) |
+| `gitea` | `apps` | Gitea git forge |
+| `kubernetes-dashboard` | `apps` | K8s Dashboard web UI |
+| `openclaw` | `apps` | OpenClaw AI gateway (this service) |
+| `postgresql` | `data` | PostgreSQL for Gitea |
+
+### ArgoCD projects
+
+| Project | Purpose | Namespaces |
+|---|---|---|
+| `secrets` | Secret management infra (ESO, Infisical) | `external-secrets`, `infisical` |
+| `data` | Databases and persistent stores | `gitea-system` |
+| `apps` | User-facing applications | `gitea-system`, `kubernetes-dashboard`, `openclaw` |
+
+## Persistent volumes
+
+| PVC | Namespace | Size | Purpose |
+|---|---|---|---|
+| `gitea-data` | `gitea-system` | 10Gi | Gitea repositories and data |
+| `postgresql-data` | `gitea-system` | 5Gi | Gitea's PostgreSQL data |
+| `data-postgresql-0` | `infisical` | 8Gi | Infisical's PostgreSQL data |
+| `redis-data-redis-master-0` | `infisical` | 8Gi | Infisical's Redis data |
+| `openclaw-data` | `openclaw` | 5Gi | OpenClaw state, workspaces, sessions |
+
+## ExternalSecrets
+
+| ExternalSecret | Namespace | Keys | Status |
+|---|---|---|---|
+| `postgresql-secret` | `gitea-system` | POSTGRES_PASSWORD, POSTGRES_USER, POSTGRES_DB, GITEA_DB_PASSWORD | SecretSynced |
+| `gitea-secret` | `gitea-system` | GITEA_SECRET_KEY | SecretSynced |
+| `gitea-admin-secret` | `gitea-system` | GITEA_ADMIN_USERNAME, GITEA_ADMIN_PASSWORD, GITEA_ADMIN_EMAIL | SecretSynced |
+| `openclaw-secret` | `openclaw` | OPENCLAW_GATEWAY_TOKEN, GEMINI_API_KEY | SecretSynced |
+
+All secrets are stored in Infisical under `homelab / prod` and synced via the `infisical` ClusterSecretStore using Universal Auth.
 
 ## Common operations
 
 ```bash
-# Check all ArgoCD applications
+# Cluster health overview
+kubectl get nodes
+kubectl get pods -A
+kubectl top nodes
+kubectl top pods -A
+
+# ArgoCD application status
 kubectl get applications -n argocd
 
-# Check pods across all namespaces
-kubectl get pods -A
-
-# Force ArgoCD sync on an application
-kubectl patch application <app-name> -n argocd \
-  --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
+# Force ArgoCD hard refresh
+kubectl annotate application <app-name> -n argocd argocd.argoproj.io/refresh=hard --overwrite
 
 # Check ExternalSecrets cluster-wide
 kubectl get externalsecret -A
 
-# View ArgoCD logs
-kubectl logs -n argocd deploy/argocd-server --tail=50
+# Force secret re-sync
+kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite
+
+# View logs
+kubectl logs -n <namespace> deploy/<name> --tail=100
 
 # Restart a deployment
 kubectl rollout restart deployment/<name> -n <namespace>
+
+# Check events (sorted by time)
+kubectl get events -A --sort-by='.metadata.creationTimestamp' | tail -20
 ```
 
 ## GitOps workflow
 
-All changes follow: edit manifests in `k8s/apps/` → commit → push to `main` → ArgoCD syncs within ~3 minutes. Never use `kubectl apply` for persistent changes.
+All changes follow: edit manifests in `k8s/apps/` → commit → push to `main` → ArgoCD syncs within ~3 minutes. ArgoCD has `selfHeal: true` and `prune: true` on all apps, so manual `kubectl apply` changes are reverted automatically.
+
+The repo structure:
+- `terraform/` — Layer 0 bootstrap (ArgoCD Helm release, bootstrap secrets, Infisical App CR)
+- `k8s/apps/` — Layer 1 GitOps manifests (one directory per service)
+- `k8s/apps/argocd/` — App of Apps: AppProjects + Application CRs
+- `skills/` — OpenClaw skills (mounted at `/skills` in this pod)
+- `agents/workspaces/` — Agent AGENTS.md personalities (copied into pod by init container)
+- `docs/` — MkDocs documentation site (auto-deploys to GitHub Pages on push)
 
 ## Adding a new service
 
 1. Create `k8s/apps/<service>/` with manifests and `kustomization.yaml`
-2. Create `k8s/apps/argocd/applications/<service>-app.yaml`
+2. Create `k8s/apps/argocd/applications/<service>-app.yaml` (assign to correct project, include standard labels)
 3. Add to `k8s/apps/argocd/kustomization.yaml`
-4. Push to `main`
+4. If the service needs secrets: add to Infisical, create ExternalSecret, reference in deployment
+5. If the service needs a Tailscale endpoint: `tailscale serve --bg --https <port> http://localhost:<nodeport>`
+6. Push to `main`
 
 ## Adding secrets for a service
 
@@ -81,9 +170,34 @@ All changes follow: edit manifests in `k8s/apps/` → commit → push to `main` 
 # Check current serve status
 tailscale serve status
 
-# Add a new service
+# Add a new HTTPS service
 tailscale serve --bg --https <port> http://localhost:<nodeport>
 
 # Remove a service
 tailscale serve --https=<port> off
+
+# Check tailnet devices
+tailscale status
 ```
+
+Note: `tailscale serve` runs on the host, not inside this pod. These commands are for reference when advising the user.
+
+## OpenClaw image rebuild
+
+When the OpenClaw submodule is updated or `Dockerfile.openclaw` is changed:
+
+```bash
+./scripts/build-openclaw.sh
+kubectl rollout restart deployment/openclaw -n openclaw
+```
+
+## Troubleshooting
+
+| Symptom | Check | Fix |
+|---|---|---|
+| Pod CrashLoopBackOff | `kubectl logs <pod> -n <ns> --previous` | Fix config/secrets, restart |
+| App stuck OutOfSync | `kubectl get application <app> -n argocd -o yaml` | Hard refresh or check repo access |
+| ExternalSecret SecretSyncedError | `kubectl describe externalsecret <name> -n <ns>` | Verify key exists in Infisical |
+| Service unreachable via Tailscale | `tailscale serve status` | Re-add the serve rule on the host |
+| Node not ready | `kubectl describe node orbstack` | Check OrbStack is running |
+| ArgoCD can't clone repo | `kubectl get secret repo-homelab -n argocd` | Check SSH deploy key |
