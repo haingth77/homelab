@@ -125,14 +125,14 @@ sequenceDiagram
     SA->>SA: Clone repo + set git identity
     SA->>GH: gh issue create (with agent footer)
     GH-->>SA: Issue #42
-    SA->>SA: git checkout -b &lt;agent-id&gt;/feat/42-add-resource-x
+    SA->>SA: git checkout -b agent-id/feat/42-add-resource-x
     SA->>SA: Edit manifests + docs
-    SA->>SA: git commit -m "feat: add resource X (#42) [agent-id]"
+    SA->>SA: git commit (with agent tag in message)
     SA->>GH: git push + gh pr create (with agent footer)
     GH-->>SA: PR URL
 
     SA-->>HA: Report PR URL
-    HA-->>User: "PR created: <url><br/>After merge, ArgoCD syncs in ~3min"
+    HA-->>User: PR created, ArgoCD syncs in ~3min
 
     User->>GH: Review & merge PR
     GH->>Argo: Push to main triggers sync

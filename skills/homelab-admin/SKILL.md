@@ -37,12 +37,13 @@ The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-la
 
 | Service | Tailscale URL | NodePort | Proxy target |
 |---|---|---|---|
+| Authentik (SSO) | `https://holdens-mac-mini.story-larch.ts.net` | 30500 | `http://localhost:30500` |
 | ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 30080 | `http://localhost:30080` |
 | Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | 30090 | `http://localhost:30090` |
 | Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 30445 | `http://localhost:30445` |
-| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8446` | 30789 | `http://localhost:30789` |
-| Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 30300 | `http://localhost:30300` |
+| Gitea | `https://holdens-mac-mini.story-larch.ts.net:8446` | 30300 | `http://localhost:30300` |
 | Gitea SSH | N/A (TCP) | 30022 | SSH |
+| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8447` | 30789 | `http://localhost:30789` |
 
 ### Tailnet devices
 
