@@ -26,18 +26,67 @@ ALL changes to the homelab repository MUST follow this process. Never push direc
 ### Workspace setup (once per session)
 
 ```bash
-cd /data/workspaces/$(whoami 2>/dev/null || echo $HOSTNAME)
+cd /data/workspaces/<your-agent-id>
 gh repo clone holdennguyen/homelab homelab 2>/dev/null || (cd homelab && git checkout main && git pull origin main)
 cd homelab
 ```
 
+### GitHub Labels
+
+Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and `gh pr create`.
+
+**Agent labels** — who is working on this (always exactly one):
+
+| Label | Agent |
+|---|---|
+| `agent:homelab-admin` | homelab-admin orchestrator |
+| `agent:devops-sre` | devops-sre infrastructure agent |
+| `agent:software-engineer` | software-engineer development agent |
+| `agent:security-analyst` | security-analyst security agent |
+
+**Type labels** — what kind of change (always exactly one):
+
+| Label | Use for |
+|---|---|
+| `type:feat` | New features, services, resources |
+| `type:fix` | Bug fixes, misconfigurations |
+| `type:chore` | Maintenance, dependency updates, cleanup |
+| `type:docs` | Documentation-only changes |
+| `type:refactor` | Restructuring without behavior change |
+| `type:security` | Security hardening, vulnerability fixes |
+
+**Area labels** — what part of the homelab is affected (one or more):
+
+| Label | Scope |
+|---|---|
+| `area:k8s` | Kubernetes manifests (`k8s/apps/`) |
+| `area:terraform` | Terraform bootstrap (Layer 0) |
+| `area:argocd` | ArgoCD applications and projects |
+| `area:secrets` | Secret management (Infisical, ESO) |
+| `area:monitoring` | Prometheus, Grafana, Alertmanager |
+| `area:networking` | Tailscale, NodePort, DNS |
+| `area:openclaw` | OpenClaw agents and skills |
+| `area:auth` | Authentik SSO and OIDC |
+| `area:gitea` | Gitea git forge |
+
+**Priority labels** — urgency (always exactly one):
+
+| Label | When to use |
+|---|---|
+| `priority:critical` | Service down, security breach, data loss risk |
+| `priority:high` | Broken functionality, needs fix soon |
+| `priority:medium` | Normal work, improvements |
+| `priority:low` | Nice to have, minor enhancements |
+
 ### Step-by-step process
 
-1. **Create a GitHub issue** — every change starts with an issue:
+1. **Create a GitHub issue** — every change starts with a labeled issue:
    ```bash
    gh issue create \
      --title "<type>: <description>" \
      --body "<why this change is needed>" \
+     --assignee holdennguyen \
+     --label "agent:<your-agent-id>,type:<type>,area:<area>,priority:<priority>" \
      --repo holdennguyen/homelab
    ```
    Capture the issue number from the output.
@@ -69,11 +118,13 @@ cd homelab
    git commit -m "<type>: <description> (#<issue-number>)"
    ```
 
-5. **Push and create a PR**:
+5. **Push and create a labeled PR**:
    ```bash
    git push -u origin HEAD
    gh pr create \
      --title "<type>: <description>" \
+     --label "agent:<your-agent-id>,type:<type>,area:<area>,priority:<priority>" \
+     --assignee holdennguyen \
      --body "$(cat <<'EOF'
    Closes #<issue-number>
 
@@ -102,6 +153,7 @@ cd homelab
 - Never commit secrets, API keys, or credentials
 - Never bundle unrelated changes in one PR
 - Never use `kubectl apply` for persistent resources (ArgoCD will revert them)
+- Never create an issue or PR without labels
 
 ## App of Apps pattern
 

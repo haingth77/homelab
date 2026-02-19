@@ -102,6 +102,7 @@ When delegating, `homelab-admin` uses `sessions_spawn` and provides:
 1. Clear task description and expected outcome
 2. Relevant file paths or service names
 3. Any context from prior conversation
+4. Label instructions (agent, type, area, priority)
 
 The spawned sub-agent session appears in the UI sidebar. Sub-agents report results back via `sessions_announce`.
 
@@ -141,12 +142,25 @@ sequenceDiagram
 **Step-by-step process (every agent follows this):**
 
 1. **Clone the repo** into the agent's workspace (`/data/workspaces/<agent-id>/homelab`)
-2. **Create a GitHub issue** via `gh issue create` describing the change
+2. **Create a labeled GitHub issue** via `gh issue create` with `--assignee holdennguyen --label "agent:<id>,type:<type>,area:<area>,priority:<priority>"`
 3. **Create a branch** from main: `<type>/<issue-number>-<short-description>` (prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`)
 4. **Make changes** to manifests, config, docs
 5. **Commit** with a message referencing the issue: `<type>: <description> (#<issue-number>)`
-6. **Push** and **create a PR** via `gh pr create`
+6. **Push** and **create a labeled PR** via `gh pr create` with the same labels
 7. **Report** the PR URL back to the orchestrator or user
+
+### GitHub Labels
+
+Every issue and PR created by agents MUST be labeled. Labels serve as the tracking and filtering mechanism since agents are not GitHub users.
+
+| Category | Labels | Rule |
+|---|---|---|
+| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst` | Exactly one — who is working on this |
+| **Type** | `type:feat`, `type:fix`, `type:chore`, `type:docs`, `type:refactor`, `type:security` | Exactly one — what kind of change |
+| **Area** | `area:k8s`, `area:terraform`, `area:argocd`, `area:secrets`, `area:monitoring`, `area:networking`, `area:openclaw`, `area:auth`, `area:gitea` | One or more — what part of the homelab |
+| **Priority** | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | Exactly one — urgency |
+
+All issues and PRs are assigned to `holdennguyen` (repo owner) since agents are not GitHub collaborators. The `agent:*` label identifies which agent is responsible.
 
 **After the PR is merged:**
 
