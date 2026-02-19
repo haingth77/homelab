@@ -88,19 +88,31 @@ flowchart LR
 
 ### Build the Image
 
-OpenClaw uses a locally built Docker image. OrbStack's Kubernetes shares the host Docker daemon, so locally built images are immediately available with `imagePullPolicy: Never`.
+OpenClaw uses a two-stage locally built Docker image. The first stage builds the upstream OpenClaw source (`openclaw:base`), and the second stage (`Dockerfile.openclaw`) layers homelab-specific ops tools on top. OrbStack's Kubernetes shares the host Docker daemon, so locally built images are immediately available with `imagePullPolicy: Never`.
 
 ```bash
 ./scripts/build-openclaw.sh
 ```
 
-This builds the image as `openclaw:latest` from the `openclaw/` directory. To use a custom tag:
+This builds the image as `openclaw:latest` with the following tools baked in:
+
+| Tool | Version | Purpose |
+|---|---|---|
+| `kubectl` | 1.32.7 | Kubernetes operations |
+| `helm` | 3.17.3 | Helm chart management |
+| `terraform` | 1.5.7 | Bootstrap layer management |
+| `argocd` | 2.14.11 | ArgoCD CLI |
+| `jq` | 1.6 | JSON processing |
+
+To use a custom tag:
 
 ```bash
 ./scripts/build-openclaw.sh openclaw:v2026.2.16
 ```
 
 If using a custom tag, update `image:` in `k8s/apps/openclaw/deployment.yaml` to match.
+
+To update tool versions, edit the `ARG` lines in `Dockerfile.openclaw` and rebuild.
 
 ### Secrets
 
@@ -361,6 +373,8 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 
 Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 
+The pod runs with a `cluster-admin` ServiceAccount so agents can execute `kubectl`, `helm`, and other ops tools against the cluster directly.
+
 ### Skills
 
 Homelab-specific skills live in `skills/` at the repo root and are mounted into the pod at `/skills` via hostPath:
@@ -413,7 +427,9 @@ Sub-agents announce results back up the chain. Configure limits in the ConfigMap
 | `k8s/apps/openclaw/configmap.yaml` | Multi-agent `openclaw.json` configuration |
 | `k8s/apps/openclaw/deployment.yaml` | Gateway deployment with config/skills/workspace volumes |
 | `k8s/apps/openclaw/service.yaml` | NodePort 30789 |
+| `k8s/apps/openclaw/rbac.yaml` | ServiceAccount + ClusterRoleBinding (cluster-admin) |
 | `k8s/apps/openclaw/kustomization.yaml` | Kustomize resource list |
+| `Dockerfile.openclaw` | Homelab overlay — adds kubectl, helm, terraform, argocd, jq |
 | `k8s/apps/argocd/applications/openclaw-app.yaml` | ArgoCD Application CR |
 | `scripts/build-openclaw.sh` | Docker image build helper |
 | `skills/` | Homelab-specific skills (mounted into pod) |

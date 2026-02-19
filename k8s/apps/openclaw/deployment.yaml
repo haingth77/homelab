@@ -18,6 +18,7 @@ spec:
         app.kubernetes.io/name: openclaw
         app.kubernetes.io/instance: openclaw
     spec:
+      serviceAccountName: openclaw
       initContainers:
         - name: init-workspaces
           image: busybox:1.36

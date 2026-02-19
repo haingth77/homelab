@@ -92,6 +92,8 @@ Agent config lives in two places:
 - **Identity:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, model, workspace, skills allowlist)
 - **Personality:** `agents/workspaces/<id>/AGENTS.md` (single source of truth, copied into pod on every restart)
 
+The container image (`Dockerfile.openclaw`) includes ops tools (kubectl, helm, terraform, argocd, jq) and the pod runs with a `cluster-admin` ServiceAccount, so agents can execute cluster operations directly.
+
 ### Per-Agent Skill Assignment
 
 Each agent has a `skills` allowlist in the configmap that restricts which skills it can see. Omitting the field means all skills; an empty array means none.

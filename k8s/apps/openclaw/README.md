@@ -40,13 +40,14 @@ flowchart TD
 | `configmap.yaml` | Multi-agent `openclaw.json` config (agents, skills, routing) |
 | `deployment.yaml` | Single-replica deployment with config/skills/workspace volumes |
 | `service.yaml` | NodePort service exposing port 30789 |
+| `rbac.yaml` | ServiceAccount + ClusterRoleBinding (cluster-admin) |
 | `kustomization.yaml` | Lists all resources |
 
 ## Image
 
-The deployment uses a locally built Docker image (`openclaw:latest`) with `imagePullPolicy: Never`. OrbStack's Kubernetes cluster shares the host Docker daemon, so locally built images are immediately available.
+The deployment uses a two-stage locally built Docker image (`openclaw:latest`) with `imagePullPolicy: Never`. The first stage builds upstream OpenClaw (`openclaw:base`), and the second stage (`Dockerfile.openclaw` at repo root) layers homelab-specific ops tools on top (kubectl, helm, terraform, argocd, jq).
 
-The `openclaw/` directory at the repo root is a **git submodule** pointing to `github.com/OpenClaw/OpenClaw`. See [docs/openclaw.md](../../../docs/openclaw.md#updating-openclaw) for the full update workflow (pull upstream, rebuild, restart).
+OrbStack's Kubernetes cluster shares the host Docker daemon, so locally built images are immediately available.
 
 Build the image:
 
@@ -62,6 +63,8 @@ git add openclaw && git commit -m "update openclaw submodule"
 ./scripts/build-openclaw.sh
 kubectl rollout restart deployment/openclaw -n openclaw
 ```
+
+To update tool versions, edit the `ARG` lines in `Dockerfile.openclaw` and rebuild.
 
 ## Secrets
 
