@@ -122,13 +122,13 @@ sequenceDiagram
     HA->>HA: Analyze request, pick agent
     HA->>SA: sessions_spawn with task context
 
-    SA->>SA: Clone repo into workspace
-    SA->>GH: gh issue create
+    SA->>SA: Clone repo + set git identity
+    SA->>GH: gh issue create (with agent footer)
     GH-->>SA: Issue #42
-    SA->>SA: git checkout -b feat/42-add-resource-x
+    SA->>SA: git checkout -b &lt;agent-id&gt;/feat/42-add-resource-x
     SA->>SA: Edit manifests + docs
-    SA->>SA: git commit -m "feat: add resource X (#42)"
-    SA->>GH: git push + gh pr create
+    SA->>SA: git commit -m "feat: add resource X (#42) [agent-id]"
+    SA->>GH: git push + gh pr create (with agent footer)
     GH-->>SA: PR URL
 
     SA-->>HA: Report PR URL
@@ -141,12 +141,12 @@ sequenceDiagram
 
 **Step-by-step process (every agent follows this):**
 
-1. **Clone the repo** into the agent's workspace (`/data/workspaces/<agent-id>/homelab`)
-2. **Create a labeled GitHub issue** via `gh issue create` with `--assignee holdennguyen --label "agent:<id>,type:<type>,area:<area>,priority:<priority>"`
-3. **Create a branch** from main: `<type>/<issue-number>-<short-description>` (prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`)
+1. **Clone the repo** into the agent's workspace and **set git identity** (`git config user.name "<agent-id>[bot]"`, `git config user.email "<agent-id>@openclaw.homelab"`)
+2. **Create a labeled GitHub issue** via `gh issue create` with `--assignee holdennguyen --label "agent:<id>,type:<type>,area:<area>,priority:<priority>"` — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
+3. **Create a branch** from main: `<agent-id>/<type>/<issue-number>-<short-description>` (prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`)
 4. **Make changes** to manifests, config, docs
-5. **Commit** with a message referencing the issue: `<type>: <description> (#<issue-number>)`
-6. **Push** and **create a labeled PR** via `gh pr create` with the same labels
+5. **Commit** with a message referencing the issue and agent: `<type>: <description> (#<issue-number>) [<agent-id>]`
+6. **Push** and **create a labeled PR** via `gh pr create` with the same labels — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
 7. **Report** the PR URL back to the orchestrator or user
 
 ### GitHub Labels
@@ -162,6 +162,22 @@ Every issue and PR created by agents MUST be labeled. Labels serve as the tracki
 
 All issues and PRs are assigned to `holdennguyen` (repo owner) since agents are not GitHub collaborators. The `agent:*` label identifies which agent is responsible.
 
+### Agent Footprint
+
+Every agent action is traceable via a mandatory footprint convention. This ensures that any commit, issue, PR, or branch can be attributed to the specific agent that performed it.
+
+| Artifact | Footprint | Example |
+|---|---|---|
+| Git commit author | `<agent-id>[bot] <<agent-id>@openclaw.homelab>` | `devops-sre[bot] <devops-sre@openclaw.homelab>` |
+| Commit message | `... [<agent-id>]` suffix | `feat: add redis (#42) [devops-sre]` |
+| Branch name | `<agent-id>/...` prefix | `devops-sre/feat/42-redis-caching` |
+| Issue labels | `agent:<agent-id>` | `agent:devops-sre` |
+| Issue body | Footer: `Agent: <agent-id> \| OpenClaw Homelab` | — |
+| PR labels | `agent:<agent-id>` | `agent:devops-sre` |
+| PR body | Footer: `Agent: <agent-id> \| OpenClaw Homelab` | — |
+
+Each agent sets its git identity during workspace setup using `git config user.name` and `git config user.email` in the cloned repo. There is no shared global git identity — every commit is attributable to the exact agent that authored it.
+
 **After the PR is merged:**
 
 - **Layer 1 changes** (k8s manifests): ArgoCD auto-syncs within ~3 minutes
@@ -172,7 +188,7 @@ All issues and PRs are assigned to `holdennguyen` (repo owner) since agents are 
 
 - `git` and `gh` CLI are baked into the container image (`Dockerfile.openclaw`)
 - `GITHUB_TOKEN` from Infisical provides authentication for `gh` CLI
-- Git identity is set via environment variables: `GIT_AUTHOR_NAME=openclaw-bot`, `GIT_COMMITTER_EMAIL=openclaw-bot@homelab.local`
+- Per-agent git identity is set via `git config` in each cloned repo (no shared global identity)
 
 ### Agent Configuration
 

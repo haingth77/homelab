@@ -29,7 +29,11 @@ ALL changes to the homelab repository MUST follow this process. Never push direc
 cd /data/workspaces/<your-agent-id>
 gh repo clone holdennguyen/homelab homelab 2>/dev/null || (cd homelab && git checkout main && git pull origin main)
 cd homelab
+git config user.name "<your-agent-id>[bot]"
+git config user.email "<your-agent-id>@openclaw.homelab"
 ```
+
+The `git config` commands MUST run in every fresh clone. They set the per-agent git identity so commits are traceable to the specific agent.
 
 ### GitHub Labels
 
@@ -78,13 +82,69 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
 | `priority:medium` | Normal work, improvements |
 | `priority:low` | Nice to have, minor enhancements |
 
+### Agent footprint (mandatory)
+
+Every action MUST be traceable to the specific agent that performed it. This is non-negotiable.
+
+**Git identity** — set per-clone via `git config` (done in workspace setup above):
+
+| Agent ID | `user.name` | `user.email` |
+|---|---|---|
+| `homelab-admin` | `homelab-admin[bot]` | `homelab-admin@openclaw.homelab` |
+| `devops-sre` | `devops-sre[bot]` | `devops-sre@openclaw.homelab` |
+| `software-engineer` | `software-engineer[bot]` | `software-engineer@openclaw.homelab` |
+| `security-analyst` | `security-analyst[bot]` | `security-analyst@openclaw.homelab` |
+
+**Commit messages** — always include the agent tag at the end:
+
+```
+<type>: <description> (#<issue-number>) [<agent-id>]
+```
+
+Example: `feat: add redis caching layer (#42) [devops-sre]`
+
+**Issue/PR body signature** — every issue and PR body MUST end with this footer:
+
+```
+---
+Agent: <agent-id> | OpenClaw Homelab
+```
+
+**Branch names** — prefix with agent ID:
+
+```
+<agent-id>/<type>/<issue-number>-<short-description>
+```
+
+Example: `devops-sre/feat/42-redis-caching`
+
+**Labels** — the `agent:<agent-id>` label is always required (see GitHub Labels above).
+
+**Summary of where footprints appear:**
+
+| Artifact | Footprint |
+|---|---|
+| Git commit author | `<agent-id>[bot] <<agent-id>@openclaw.homelab>` |
+| Commit message | `... [<agent-id>]` suffix |
+| Branch name | `<agent-id>/...` prefix |
+| Issue labels | `agent:<agent-id>` |
+| Issue body | `Agent: <agent-id> \| OpenClaw Homelab` footer |
+| PR labels | `agent:<agent-id>` |
+| PR body | `Agent: <agent-id> \| OpenClaw Homelab` footer |
+
 ### Step-by-step process
 
 1. **Create a GitHub issue** — every change starts with a labeled issue:
    ```bash
    gh issue create \
      --title "<type>: <description>" \
-     --body "<why this change is needed>" \
+     --body "$(cat <<'EOF'
+   <why this change is needed>
+
+   ---
+   Agent: <your-agent-id> | OpenClaw Homelab
+   EOF
+   )" \
      --assignee holdennguyen \
      --label "agent:<your-agent-id>,type:<type>,area:<area>,priority:<priority>" \
      --repo holdennguyen/homelab
@@ -94,7 +154,7 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
 2. **Create a branch** from latest main:
    ```bash
    git checkout main && git pull origin main
-   git checkout -b <type>/<issue-number>-<short-description>
+   git checkout -b <your-agent-id>/<type>/<issue-number>-<short-description>
    ```
 
    Branch naming convention:
@@ -112,10 +172,10 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
    - Terraform (Layer 0): `terraform/`
    - Documentation: `k8s/apps/<service>/README.md` (single source of truth)
 
-4. **Commit** referencing the issue:
+4. **Commit** referencing the issue with agent tag:
    ```bash
    git add <files>
-   git commit -m "<type>: <description> (#<issue-number>)"
+   git commit -m "<type>: <description> (#<issue-number>) [<your-agent-id>]"
    ```
 
 5. **Push and create a labeled PR**:
@@ -135,6 +195,9 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
    - [ ] ArgoCD syncs successfully
    - [ ] Service health verified
    - [ ] Documentation updated
+
+   ---
+   Agent: <your-agent-id> | OpenClaw Homelab
    EOF
    )"
    ```
@@ -154,6 +217,9 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
 - Never bundle unrelated changes in one PR
 - Never use `kubectl apply` for persistent resources (ArgoCD will revert them)
 - Never create an issue or PR without labels
+- Never commit without the `[<agent-id>]` suffix in the message
+- Never create an issue or PR body without the agent signature footer
+- Never use a branch name without the `<agent-id>/` prefix
 
 ## App of Apps pattern
 

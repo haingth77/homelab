@@ -82,20 +82,16 @@ spec:
                 secretKeyRef:
                   name: openclaw-secret
                   key: GITHUB_TOKEN
-            - name: GIT_AUTHOR_NAME
-              value: "openclaw-bot"
-            - name: GIT_AUTHOR_EMAIL
-              value: "openclaw-bot@homelab.local"
-            - name: GIT_COMMITTER_NAME
-              value: "openclaw-bot"
-            - name: GIT_COMMITTER_EMAIL
-              value: "openclaw-bot@homelab.local"
             - name: GIT_CONFIG_COUNT
-              value: "1"
+              value: "2"
             - name: GIT_CONFIG_KEY_0
               value: "credential.helper"
             - name: GIT_CONFIG_VALUE_0
               value: "!gh auth git-credential"
+            - name: GIT_CONFIG_KEY_1
+              value: "init.defaultBranch"
+            - name: GIT_CONFIG_VALUE_1
+              value: "main"
           ports:
             - name: http
               containerPort: 18789

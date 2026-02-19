@@ -118,13 +118,13 @@ sequenceDiagram
     HA->>HA: Analyze request, pick agent
     HA->>SA: sessions_spawn with task context
 
-    SA->>SA: Clone repo into workspace
-    SA->>GH: gh issue create
+    SA->>SA: Clone repo + set git identity
+    SA->>GH: gh issue create (with agent footer)
     GH-->>SA: Issue #42
-    SA->>SA: git checkout -b feat/42-add-resource-x
+    SA->>SA: git checkout -b &lt;agent-id&gt;/feat/42-add-resource-x
     SA->>SA: Edit manifests + docs
-    SA->>SA: git commit -m "feat: add resource X (#42)"
-    SA->>GH: git push + gh pr create
+    SA->>SA: git commit -m "feat: add resource X (#42) [agent-id]"
+    SA->>GH: git push + gh pr create (with agent footer)
     GH-->>SA: PR URL
 
     SA-->>HA: Report PR URL
@@ -135,7 +135,19 @@ sequenceDiagram
     Argo->>Argo: Auto-sync within ~3 minutes
 ```
 
-The git workflow details are embedded in each agent's `AGENTS.md` personality and the `gitops` skill. Git identity is set via environment variables (`GIT_AUTHOR_NAME=openclaw-bot`). The `GITHUB_TOKEN` from Infisical powers `gh` CLI authentication.
+The git workflow details are embedded in each agent's `AGENTS.md` personality and the `gitops` skill. Each agent sets its own git identity via `git config` in the cloned repo (e.g. `devops-sre[bot] <devops-sre@openclaw.homelab>`), so every commit is traceable to the specific agent. The `GITHUB_TOKEN` from Infisical powers `gh` CLI authentication.
+
+### Agent Footprint
+
+Every action is traceable to the specific agent that performed it:
+
+| Artifact | Footprint |
+|---|---|
+| Git commit author | `<agent-id>[bot] <<agent-id>@openclaw.homelab>` |
+| Commit message | `... [<agent-id>]` suffix |
+| Branch name | `<agent-id>/<type>/...` prefix |
+| Issue/PR labels | `agent:<agent-id>` |
+| Issue/PR body | `Agent: <agent-id> \| OpenClaw Homelab` footer |
 
 ## Deployment
 

@@ -27,6 +27,8 @@ ALL changes to the homelab repository MUST follow this process. Never push direc
 cd /data/workspaces/software-engineer
 gh repo clone holdennguyen/homelab homelab 2>/dev/null || (cd homelab && git checkout main && git pull origin main)
 cd homelab
+git config user.name "software-engineer[bot]"
+git config user.email "software-engineer@openclaw.homelab"
 ```
 
 ### For every change
@@ -35,7 +37,13 @@ cd homelab
    ```bash
    gh issue create \
      --title "<type>: <description>" \
-     --body "<details>" \
+     --body "$(cat <<'EOF'
+   <details>
+
+   ---
+   Agent: software-engineer | OpenClaw Homelab
+   EOF
+   )" \
      --assignee holdennguyen \
      --label "agent:software-engineer,type:<type>,area:<area>,priority:<priority>" \
      --repo holdennguyen/homelab
@@ -44,16 +52,16 @@ cd homelab
 2. **Create a branch** from latest main:
    ```bash
    git checkout main && git pull origin main
-   git checkout -b <type>/<issue-number>-<short-description>
+   git checkout -b software-engineer/<type>/<issue-number>-<short-description>
    ```
    Branch prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`
 
 3. **Make changes** — implement with tests alongside feature code
 
-4. **Commit** with a descriptive message referencing the issue:
+4. **Commit** with a descriptive message referencing the issue and agent tag:
    ```bash
    git add <files>
-   git commit -m "<type>: <description> (#<issue-number>)"
+   git commit -m "<type>: <description> (#<issue-number>) [software-engineer]"
    ```
 
 5. **Push and create a labeled PR**:
@@ -72,6 +80,9 @@ cd homelab
    ## Test plan
    - [ ] Tests pass
    - [ ] Code reviewed (self-review diff)
+
+   ---
+   Agent: software-engineer | OpenClaw Homelab
    EOF
    )"
    ```
@@ -87,12 +98,23 @@ cd homelab
 
 Every issue and PR MUST have exactly one agent label, one type label, one or more area labels, and one priority label.
 
+### Agent footprint (mandatory)
+
+Every action you take MUST be traceable to you. This is non-negotiable:
+
+- **Git commits:** Author is `software-engineer[bot] <software-engineer@openclaw.homelab>` (set in workspace setup)
+- **Commit messages:** Always end with `[software-engineer]`
+- **Branch names:** Always start with `software-engineer/`
+- **Issues and PRs:** Always have the `agent:software-engineer` label
+- **Issue and PR bodies:** Always end with `---\nAgent: software-engineer | OpenClaw Homelab`
+
 ### Git workflow rules
 
 - Never commit secrets, API keys, or credentials
 - Include documentation updates in the same PR
 - One PR per logical change — don't bundle unrelated changes
 - Keep commits atomic with descriptive messages
+- Never omit the agent footprint from any artifact (commit, branch, issue, PR)
 
 ## Rules
 
