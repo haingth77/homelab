@@ -75,6 +75,9 @@ data:
         "agentToAgent": {
           "enabled": true,
           "allow": ["homelab-admin", "devops-sre", "software-engineer", "security-analyst"]
+        },
+        "sessions": {
+          "visibility": "all"
         }
       }
     }
