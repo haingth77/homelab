@@ -41,6 +41,15 @@ flowchart TD
             gitea_secret["gitea-secret\n(created by ESO)"]
             gitea_admin_secret["gitea-admin-secret\n(created by ESO)"]
         end
+        subgraph authentikNs["authentik namespace"]
+            authentik_secret["authentik-secret\n(created by ESO)"]
+        end
+        subgraph monitoringNs["monitoring namespace"]
+            grafana_secret["grafana-secret\n(created by ESO)"]
+        end
+        subgraph openclawNs["openclaw namespace"]
+            openclaw_secret["openclaw-secret\n(created by ESO)"]
+        end
         subgraph argocdNs2["argocd namespace"]
             argocd_secret["argocd-secret\n(admin.password set by Helm)"]
         end
@@ -58,6 +67,7 @@ flowchart TD
         AUTHENTIK_SECRETS["AUTHENTIK_SECRET_KEY\nAUTHENTIK_BOOTSTRAP_PASSWORD\nAUTHENTIK_BOOTSTRAP_TOKEN\nAUTHENTIK_POSTGRES_PASSWORD"]
         GRAFANA_SECRETS["GRAFANA_ADMIN_PASSWORD\nGRAFANA_OAUTH_CLIENT_SECRET"]
         GITEA_OAUTH["GITEA_OAUTH_CLIENT_SECRET"]
+        OPENCLAW_SECRETS["OPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY"]
     end
 
     TFVars --> TFState
@@ -74,6 +84,10 @@ flowchart TD
     GITEA_ADMIN_USERNAME --> gitea_admin_secret
     GITEA_ADMIN_PASSWORD --> gitea_admin_secret
     GITEA_ADMIN_EMAIL --> gitea_admin_secret
+    AUTHENTIK_SECRETS --> authentik_secret
+    GRAFANA_SECRETS --> grafana_secret
+    GITEA_OAUTH --> gitea_secret
+    OPENCLAW_SECRETS --> openclaw_secret
 ```
 
 ## Bootstrap Secrets (Terraform-Managed)
@@ -112,6 +126,8 @@ flowchart LR
                         s13["GRAFANA_ADMIN_PASSWORD"]
                         s14["GRAFANA_OAUTH_CLIENT_SECRET"]
                         s15["GITEA_OAUTH_CLIENT_SECRET"]
+                        s16["OPENCLAW_GATEWAY_TOKEN"]
+                        s17["GEMINI_API_KEY"]
                     end
                 end
             end

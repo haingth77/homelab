@@ -254,7 +254,10 @@ For the full networking reference, see [docs/networking.md](./networking.md).
 ```
 homelab/
 ├── .gitignore                      # Guards terraform.tfvars, .terraform/, *.tfstate
+├── .github/workflows/docs.yml     # GitHub Pages deploy on push to main
 ├── README.md                       # Quick-start and service table
+├── mkdocs.yml                      # MkDocs Material site config
+├── Dockerfile.openclaw             # Homelab overlay for OpenClaw image (kubectl, helm, etc.)
 ├── terraform/                      # Layer 0 — bootstrap (run once)
 │   ├── README.md                   # Terraform variables and day-2 ops reference
 │   ├── providers.tf                # kubernetes + helm + local + null providers
@@ -275,9 +278,22 @@ homelab/
 │       ├── monitoring/             # Grafana ExternalSecret
 │       ├── openclaw/               # OpenClaw AI gateway manifests
 │       └── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
-└── docs/                           # Extended documentation
-    ├── architecture.md             # This file
-    ├── bootstrap.md                # Day-1 setup walkthrough
-    ├── networking.md               # Tailscale + NodePort deep-dive
-    └── secret-management.md       # Infisical + ESO reference
+├── docs/                           # MkDocs documentation site
+│   ├── architecture.md             # This file
+│   ├── bootstrap.md                # Day-1 setup walkthrough
+│   ├── networking.md               # Tailscale + NodePort deep-dive
+│   ├── secret-management.md       # Infisical + ESO reference
+│   ├── argocd.md                   # ArgoCD (includes k8s/apps/argocd/README.md)
+│   ├── authentik.md                # Authentik SSO and OIDC integration
+│   ├── gitea.md                    # Gitea (includes k8s/apps/gitea/README.md)
+│   ├── postgresql.md               # PostgreSQL (includes k8s/apps/postgresql/README.md)
+│   ├── external-secrets.md         # ESO (includes k8s/apps/external-secrets/README.md)
+│   ├── infisical.md                # Infisical (includes k8s/apps/infisical/README.md)
+│   ├── monitoring.md               # Grafana + Prometheus monitoring stack
+│   ├── openclaw.md                 # OpenClaw AI gateway
+│   └── ai-agents.md               # Cursor rules + OpenClaw agents/skills
+├── agents/workspaces/              # OpenClaw agent AGENTS.md personality files
+├── skills/                         # Homelab-specific OpenClaw skills
+├── openclaw/                       # OpenClaw source (git submodule)
+└── scripts/                        # Helper scripts (image builds, etc.)
 ```

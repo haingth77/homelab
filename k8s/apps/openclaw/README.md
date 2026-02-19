@@ -1,33 +1,51 @@
 # OpenClaw
 
-Multi-channel AI gateway for agent orchestration in the homelab. OpenClaw provides a unified gateway that connects multiple AI model providers (Anthropic, OpenAI, etc.) and messaging channels into a single service.
+OpenClaw is a multi-channel AI gateway that serves as the agent orchestration layer for the homelab. It connects to multiple AI model providers (Anthropic, OpenAI, Gemini, etc.) and exposes a unified gateway API for AI agent workflows running on the Mac mini.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    subgraph openclawNs["openclaw namespace"]
-        Deployment["OpenClaw Deployment\n1 replica"]
-        Svc["Service\nNodePort :30789"]
-        PVC["PVC: openclaw-data\n5Gi"]
-        ES["ExternalSecret: openclaw-secret"]
-        K8sSecret["K8s Secret: openclaw-secret"]
+    subgraph tailnet["Tailscale Network"]
+        Clients["Devices on tailnet\niPhone, iPad, Mac"]
+        TServe["tailscale serve\nHTTPS :8447 → localhost:30789"]
     end
 
-    subgraph eso["external-secrets namespace"]
-        CSS["ClusterSecretStore: infisical"]
+    subgraph orb["OrbStack Kubernetes Cluster"]
+        subgraph openclawNs["openclaw namespace"]
+            Svc["Service\nNodePort :30789"]
+            Deploy["OpenClaw Gateway\nPort :18789"]
+            CM["ConfigMap: openclaw-config\nopenclaw.json (multi-agent)"]
+            WSHP["hostPath: agents/workspaces\nAGENTS.md personalities"]
+            PVC["PVC: openclaw-data\n5Gi"]
+            ES["ExternalSecret:\nopenclaw-secret"]
+            K8sSecret["K8s Secret:\nopenclaw-secret"]
+        end
+
+        subgraph esoNs["external-secrets namespace"]
+            CSS["ClusterSecretStore:\ninfisical"]
+        end
     end
 
-    subgraph infisical["Infisical"]
-        Secrets["homelab / prod\nOPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY"]
+    subgraph infisical["Infisical (homelab / prod)"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY"]
     end
 
+    subgraph providers["AI Model Providers"]
+        Gemini["Google Gemini API"]
+    end
+
+    Clients -- "WireGuard" --> TServe
+    TServe --> Svc
+    Svc --> Deploy
+    CM -- "/config" --> Deploy
+            WSHP -- "init container" --> PVC
+    Deploy --> PVC
     ES -- "secretStoreRef" --> CSS
-    CSS -- "Universal Auth" --> Secrets
-    Secrets --> K8sSecret
-    K8sSecret -- "envFrom" --> Deployment
-    Deployment --> PVC
-    Svc --> Deployment
+    CSS -- "Universal Auth" --> InfisicalSecrets
+    InfisicalSecrets -- "creates" --> K8sSecret
+    K8sSecret -- "env vars" --> Deploy
+    Deploy --> Gemini
 ```
 
 ## Directory Contents
@@ -35,155 +53,328 @@ flowchart TD
 | File | Purpose |
 |------|---------|
 | `namespace.yaml` | Dedicated `openclaw` namespace |
-| `pvc.yaml` | 5Gi persistent volume for OpenClaw state and workspace data |
-| `external-secret.yaml` | Syncs gateway token and API keys from Infisical |
+| `pvc.yaml` | 5Gi PVC for state data and agent workspaces |
+| `external-secret.yaml` | Syncs gateway token and API keys from Infisical → `openclaw-secret` |
 | `configmap.yaml` | Multi-agent `openclaw.json` config (agents, skills, routing) |
 | `deployment.yaml` | Single-replica deployment with config/skills/workspace volumes |
 | `service.yaml` | NodePort service exposing port 30789 |
 | `rbac.yaml` | ServiceAccount + ClusterRoleBinding (cluster-admin) |
-| `kustomization.yaml` | Lists all resources |
+| `kustomization.yaml` | Kustomize resource list |
 
-## Image
+Related files outside this directory:
 
-The deployment uses a two-stage locally built Docker image (`openclaw:latest`) with `imagePullPolicy: Never`. The first stage builds upstream OpenClaw (`openclaw:base`), and the second stage (`Dockerfile.openclaw` at repo root) layers homelab-specific ops tools on top (kubectl, helm, terraform, argocd, jq).
+| File | Purpose |
+|------|---------|
+| `Dockerfile.openclaw` (repo root) | Homelab overlay — adds kubectl, helm, terraform, argocd, jq |
+| `k8s/apps/argocd/applications/openclaw-app.yaml` | ArgoCD Application CR |
+| `scripts/build-openclaw.sh` | Docker image build helper |
+| `skills/` (repo root) | Homelab-specific skills (mounted into pod via hostPath) |
+| `agents/workspaces/` (repo root) | Agent AGENTS.md personality files (copied into pod by init container) |
 
-OrbStack's Kubernetes cluster shares the host Docker daemon, so locally built images are immediately available.
+## How It Fits in the Homelab
 
-Build the image:
+OpenClaw runs as a standard Kustomize application managed by ArgoCD, following the same App of Apps pattern as every other service. Its secrets flow through the Infisical → ESO → K8s Secret pipeline.
+
+```mermaid
+flowchart LR
+    subgraph argocd["ArgoCD (App of Apps)"]
+        RootApp["argocd-apps\n(default project)"]
+    end
+
+    subgraph secretsProj["secrets project"]
+        Infisical["infisical"]
+        ESO["external-secrets"]
+        ESOConfig["external-secrets-config"]
+    end
+
+    subgraph dataProj["data project"]
+        PG["postgresql"]
+    end
+
+    subgraph appsProj["apps project"]
+        Gitea["gitea"]
+        Mon["monitoring"]
+        OC["openclaw"]
+    end
+
+    RootApp --> secretsProj
+    RootApp --> dataProj
+    RootApp --> appsProj
+```
+
+## Deployment
+
+### Prerequisites
+
+- OpenClaw Docker image built locally (see [Build the Image](#build-the-image))
+- Secrets added to Infisical (see [Secrets](#secrets))
+
+### Build the Image
+
+OpenClaw uses a two-stage locally built Docker image. The first stage builds the upstream OpenClaw source (`openclaw:base`), and the second stage (`Dockerfile.openclaw`) layers homelab-specific ops tools on top. OrbStack's Kubernetes shares the host Docker daemon, so locally built images are immediately available with `imagePullPolicy: Never`.
 
 ```bash
 ./scripts/build-openclaw.sh
 ```
 
-After updating the openclaw submodule, rebuild and restart:
+This builds the image as `openclaw:latest` with the following tools baked in:
+
+| Tool | Version | Purpose |
+|---|---|---|
+| `kubectl` | 1.32.7 | Kubernetes operations |
+| `helm` | 3.17.3 | Helm chart management |
+| `terraform` | 1.5.7 | Bootstrap layer management |
+| `argocd` | 2.14.11 | ArgoCD CLI |
+| `jq` | 1.6 | JSON processing |
+
+To use a custom tag:
 
 ```bash
-cd openclaw && git pull origin main && cd ..
-git add openclaw && git commit -m "update openclaw submodule"
-./scripts/build-openclaw.sh
-kubectl rollout restart deployment/openclaw -n openclaw
+./scripts/build-openclaw.sh openclaw:v2026.2.16
 ```
+
+If using a custom tag, update `image:` in `k8s/apps/openclaw/deployment.yaml` to match.
 
 To update tool versions, edit the `ARG` lines in `Dockerfile.openclaw` and rebuild.
 
-## Secrets
+### Secrets
 
-All secrets are stored in Infisical under `homelab / prod` and synced by ESO:
+Add the following secrets to Infisical under **homelab / prod**:
 
-| Infisical Key | Description | Required |
+| Infisical Key | How to Generate | Required |
 |---|---|---|
-| `OPENCLAW_GATEWAY_TOKEN` | Auth token for gateway access (use `openssl rand -hex 32`) | Yes |
-| `GEMINI_API_KEY` | Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | At least one provider |
+| `OPENCLAW_GATEWAY_TOKEN` | `openssl rand -hex 32` | Yes |
+| `GEMINI_API_KEY` | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | At least one provider |
 
-To add more model providers or channel tokens (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`), add the key to Infisical, then add a new entry to `external-secret.yaml` and a corresponding `env` entry in `deployment.yaml`.
+After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
+
+```bash
+kubectl annotate externalsecret openclaw-secret -n openclaw \
+  force-sync=$(date +%s) --overwrite
+```
+
+### Adding More Providers or Channels
+
+To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_BOT_TOKEN`):
+
+1. Add the key to Infisical under `homelab / prod`
+2. Add a new entry to `external-secret.yaml`:
+
+```yaml
+    - secretKey: ANTHROPIC_API_KEY
+      remoteRef:
+        key: ANTHROPIC_API_KEY
+```
+
+3. Add a corresponding `env` entry to `deployment.yaml`:
+
+```yaml
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secret
+                  key: ANTHROPIC_API_KEY
+```
+
+4. Push to `main` — ArgoCD syncs the change automatically.
+
+### Deploy
+
+Once the image is built and secrets are in Infisical, push the k8s manifests to `main`. ArgoCD detects the new Application CR and deploys within ~3 minutes.
+
+```bash
+# Verify the ArgoCD application
+kubectl get application openclaw -n argocd
+
+# Watch pod come up
+kubectl get pods -n openclaw -w
+
+# Check ExternalSecret resolved
+kubectl get externalsecret -n openclaw
+```
 
 ## Networking
 
-| Layer | Value |
-|---|---|
-| Container port | 18789 |
-| NodePort | 30789 |
-| Tailscale HTTPS | 8446 |
-| URL | `https://holdens-mac-mini.story-larch.ts.net:8446` |
+```mermaid
+flowchart LR
+    Browser["Browser / Agent Client"]
+    TS["Tailscale Serve\nHTTPS :8447\nLet's Encrypt cert"]
+    NP["NodePort :30789\nlocalhost"]
+    Pod["OpenClaw Pod\n:18789"]
+
+    Browser -- "WireGuard\nhttps://holdens-mac-mini\n.story-larch.ts.net:8447" --> TS
+    TS -- "http://localhost:30789" --> NP
+    NP --> Pod
+```
+
+| Layer | Port | Protocol |
+|---|---|---|
+| Container | 18789 | HTTP |
+| NodePort | 30789 | HTTP (localhost only) |
+| Tailscale Serve | 8447 | HTTPS (Let's Encrypt) |
 
 One-time Tailscale Serve setup:
 
 ```bash
-tailscale serve --bg --https 8446 http://localhost:30789
+tailscale serve --bg --https 8447 http://localhost:30789
 ```
+
+Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8447`
 
 ## Running CLI Commands Inside the Pod
 
-The OpenClaw CLI is available inside the running pod. Use `kubectl exec` to run any `openclaw` subcommand:
+The OpenClaw CLI is built into the container image. Run any `openclaw` subcommand via `kubectl exec`:
 
 ```bash
 kubectl exec -n openclaw deploy/openclaw -- node dist/index.js <command>
 ```
 
-The gateway listens on port 18789 (OpenClaw's default), so CLI commands auto-discover it without extra flags.
+The gateway uses its default port (18789) inside the pod, so CLI commands auto-discover it without extra env vars or flags.
 
-## Device Pairing (First Connection)
-
-When you connect to the Control UI from a new browser or device, the gateway requires a **one-time pairing approval**. This is a security measure -- even with the correct gateway token, remote connections must be explicitly approved.
-
-**What you'll see in the UI:** `disconnected (1008): pairing required`
-
-**To approve the device:**
+Common commands:
 
 ```bash
-# 1. List pending pairing requests
-kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
-
-# 2. Approve by request ID (from the "Request" column)
-kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
-```
-
-After approval, refresh the UI and click **Connect**. The device is remembered and won't require re-approval unless revoked.
-
-**Notes:**
-
-- Each browser profile generates a unique device ID -- switching browsers or clearing browser data requires re-pairing.
-- Connections from `127.0.0.1` (e.g., `kubectl port-forward`) are auto-approved.
-- All remote connections (Tailscale, LAN) require explicit approval.
-- To revoke a device: `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices revoke --device <id> --role <role>`
-
-## Operational Commands
-
-```bash
-# Check pod status
-kubectl get pods -n openclaw
-
-# View logs
-kubectl logs -n openclaw deploy/openclaw --tail=100
-
-# Restart after image rebuild
-kubectl rollout restart deployment/openclaw -n openclaw
-
-# Check ExternalSecret status
-kubectl get externalsecret -n openclaw
-
-# Force secret re-sync
-kubectl annotate externalsecret openclaw-secret -n openclaw \
-  force-sync=$(date +%s) --overwrite
-
-# Port-forward for local testing (bypasses Tailscale)
-kubectl port-forward -n openclaw svc/openclaw 18789:18789
-
-# --- OpenClaw CLI (inside the pod) ---
-
-# List paired and pending devices
-kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
-
-# Approve a pending device
-kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
-
-# Gateway health check
+# Gateway health
 kubectl exec -n openclaw deploy/openclaw -- node dist/index.js health
 
-# Open dashboard URL (prints the URL with embedded token)
-kubectl exec -n openclaw deploy/openclaw -- node dist/index.js dashboard --no-open
+# List devices (paired + pending)
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
 
-# List connected channels
-kubectl exec -n openclaw deploy/openclaw -- node dist/index.js channels status
+# Approve a device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+
+# Print dashboard URL with embedded token
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js dashboard --no-open
 
 # Run diagnostics
 kubectl exec -n openclaw deploy/openclaw -- node dist/index.js doctor
 ```
 
-## Multi-Agent Architecture
+## First Connection: Device Pairing
 
-The deployment runs four agents, each with its own workspace and personality:
+OpenClaw requires a **one-time device pairing approval** for every new browser or device that connects to the Control UI over the network. This is a security measure separate from the gateway token -- even with the correct token, remote connections must be explicitly approved.
 
-| Agent | Role | Workspace |
-|---|---|---|
-| `homelab-admin` (default) | Orchestrator — coordinates tasks, delegates to sub-agents | `/data/workspaces/homelab-admin` |
-| `devops-sre` | Infrastructure, K8s ops, Terraform, incident response | `/data/workspaces/devops-sre` |
-| `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
-| `security-analyst` | Security audits, vulnerability assessment, hardening | `/data/workspaces/security-analyst` |
+### What Happens
 
-Configuration is in `configmap.yaml` (mounted at `/config/openclaw.json`). Agent personalities live in `agents/workspaces/<id>/AGENTS.md` at the repo root and are copied into the pod workspace on every restart by the init container.
+1. Open the Control UI at `https://holdens-mac-mini.story-larch.ts.net:8447`
+2. Enter your `OPENCLAW_GATEWAY_TOKEN` in the settings panel and click **Connect**
+3. You see: `disconnected (1008): pairing required`
 
-Homelab-specific skills are mounted from the host at `/skills` via hostPath. Skill definitions live in `skills/` at the repo root. Each agent has a `skills` allowlist in the configmap:
+This is expected. The browser generated a unique device ID and sent a pairing request to the gateway.
+
+### Approve the Device
+
+```bash
+# List pending pairing requests
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# Find the request ID in the "Request" column and approve it
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+```
+
+After approval, go back to the UI and click **Connect** again. The connection should succeed.
+
+### Pairing Rules
+
+- **Local connections** (`127.0.0.1`, e.g., via `kubectl port-forward`) are auto-approved.
+- **Remote connections** (Tailscale, LAN) always require explicit approval.
+- **Each browser profile** generates a unique device ID. Switching browsers, clearing browser data, or using incognito mode requires re-pairing.
+- **Approval persists** across gateway restarts (stored in the PVC at `/data`).
+- **Revoke a device**: `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices revoke --device <id> --role <role>`
+
+### Retrieve the Gateway Token
+
+If you need to retrieve the token value stored in the cluster:
+
+```bash
+kubectl get secret openclaw-secret -n openclaw \
+  -o jsonpath='{.data.OPENCLAW_GATEWAY_TOKEN}' | base64 -d
+```
+
+## Updating OpenClaw
+
+The `openclaw/` directory is a **git submodule** pointing to `github.com/OpenClaw/OpenClaw`. The homelab repo pins a specific commit; openclaw's internal files are not tracked by the homelab repo.
+
+### Pull the latest upstream release
+
+```bash
+# 1. Fetch and update the submodule to the latest upstream commit
+cd openclaw
+git fetch origin
+git checkout main
+git pull origin main
+cd ..
+
+# 2. Record the new commit in the homelab repo
+git add openclaw
+git commit -m "update openclaw submodule to $(cd openclaw && git log -1 --format='%h — %s')"
+git push origin main
+
+# 3. Rebuild the Docker image with the new source
+./scripts/build-openclaw.sh
+
+# 4. Restart the deployment to pick up the new image
+kubectl rollout restart deployment/openclaw -n openclaw
+
+# 5. Watch the rollout
+kubectl rollout status deployment/openclaw -n openclaw
+```
+
+### Pin to a specific version
+
+```bash
+cd openclaw
+git fetch origin --tags
+git checkout v2026.2.16    # or any tag/commit
+cd ..
+git add openclaw
+git commit -m "pin openclaw submodule to v2026.2.16"
+git push origin main
+./scripts/build-openclaw.sh
+kubectl rollout restart deployment/openclaw -n openclaw
+```
+
+### Clone the homelab repo (fresh machine)
+
+When cloning the homelab repo on a new machine, the submodule directory will be empty by default. Initialize it with:
+
+```bash
+git clone git@github.com:holdennguyen/homelab.git
+cd homelab
+git submodule update --init
+```
+
+## Multi-Agent & Skills Architecture
+
+OpenClaw runs four agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
+
+```mermaid
+flowchart TD
+    HA["homelab-admin\n(Orchestrator)"]
+    DS["devops-sre\n(Infrastructure)"]
+    SE["software-engineer\n(Development)"]
+    SA["security-analyst\n(Security)"]
+
+    HA -- "sessions_spawn" --> DS
+    HA -- "sessions_spawn" --> SE
+    HA -- "sessions_spawn" --> SA
+
+    subgraph skills["Skills (/skills)"]
+        S1["homelab-admin"]
+        S2["devops-sre"]
+        S3["software-engineer"]
+        S4["security-analyst"]
+        S5["gitops"]
+        S6["secret-management"]
+    end
+
+    HA --> S1 & S5 & S6
+    DS --> S2 & S5 & S6
+    SE --> S3
+    SA --> S4 & S6
+```
+
+Each agent has a `skills` allowlist in the configmap that restricts which skills it can see (omit = all skills; empty array = none):
 
 | Agent | Assigned Skills |
 |---|---|
@@ -192,39 +383,131 @@ Homelab-specific skills are mounted from the host at `/skills` via hostPath. Ski
 | `software-engineer` | `software-engineer` |
 | `security-analyst` | `security-analyst`, `secret-management` |
 
+### Agents
+
+| Agent ID | Role | Model | Workspace |
+|---|---|---|---|
+| `homelab-admin` | Default orchestrator — coordinates tasks, delegates to sub-agents | `google/gemini-2.5-pro` | `/data/workspaces/homelab-admin` |
+| `devops-sre` | Infrastructure, K8s ops, Terraform, incident response | `google/gemini-2.5-pro` | `/data/workspaces/devops-sre` |
+| `software-engineer` | Code development, review, testing | `google/gemini-2.5-pro` | `/data/workspaces/software-engineer` |
+| `security-analyst` | Security audits, vulnerability assessment, hardening | `google/gemini-2.5-pro` | `/data/workspaces/security-analyst` |
+
+Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
+
+The pod runs with a `cluster-admin` ServiceAccount so agents can execute `kubectl`, `helm`, and other ops tools against the cluster directly.
+
+### Skills
+
+Homelab-specific skills live in `skills/` at the repo root and are mounted into the pod at `/skills` via hostPath:
+
+| Skill | Description |
+|---|---|
+| `homelab-admin` | Cluster operations, service management, GitOps workflow |
+| `devops-sre` | Infrastructure debugging, Terraform, incident response |
+| `software-engineer` | Code development, review, testing conventions |
+| `security-analyst` | Security audits, RBAC review, vulnerability assessment |
+| `gitops` | ArgoCD App of Apps pattern, sync management |
+| `secret-management` | Infisical → ESO → K8s pipeline operations |
+| `common/Documentation` | Standardized documentation generation |
+
+Skills follow the [AgentSkills](https://agentskills.io) format with OpenClaw-compatible `SKILL.md` frontmatter.
+
 ### Sub-agent spawning
 
-The `homelab-admin` orchestrator can spawn sub-agents for specialized tasks:
+The orchestrator pattern uses `maxSpawnDepth: 2`:
+- **Depth 0** — main agent (`homelab-admin`) receives user requests
+- **Depth 1** — orchestrator spawns specialized sub-agents via `sessions_spawn`
+- **Depth 2** — sub-agents can spawn leaf workers for parallel tasks
 
-```bash
-# Inside OpenClaw chat, the orchestrator uses sessions_spawn:
-# "Spawn devops-sre to investigate the CrashLoopBackOff in namespace gitea-system"
-```
-
-Sub-agents run in isolated sessions with `maxSpawnDepth: 2` (orchestrator pattern) and announce results back to the main agent.
+Sub-agents announce results back up the chain. Configure limits in the ConfigMap:
+- `maxConcurrent: 4` — max parallel sub-agents
+- `maxChildrenPerAgent: 3` — max children per agent session
+- `archiveAfterMinutes: 120` — auto-cleanup of finished sub-agent sessions
 
 ### Adding a new agent
 
-1. Add the agent to `configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
+1. Add the agent entry to `configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `deployment.yaml`
-4. Add it to `tools.agentToAgent.allow` in the configmap
+4. Add the agent ID to `tools.agentToAgent.allow` in the config
 5. Push to `main`
 
 ### Adding a new skill
 
-1. Create `skills/<name>/SKILL.md` with OpenClaw-compatible frontmatter
+1. Create `skills/<name>/SKILL.md` with OpenClaw frontmatter (`name`, `description`, optional `metadata`)
 2. Add the skill name to the `skills` array of each agent that should use it in the configmap
-3. Push to `main` and restart the pod
+3. Push to `main` and restart the pod: `kubectl rollout restart deployment/openclaw -n openclaw`
+
+## Operational Commands
+
+### Kubernetes
+
+```bash
+# Pod status
+kubectl get pods -n openclaw
+
+# Logs (last 100 lines)
+kubectl logs -n openclaw deploy/openclaw --tail=100
+
+# Follow logs
+kubectl logs -n openclaw deploy/openclaw -f
+
+# Restart deployment
+kubectl rollout restart deployment/openclaw -n openclaw
+
+# Check ExternalSecret status
+kubectl describe externalsecret openclaw-secret -n openclaw
+
+# Force secret re-sync
+kubectl annotate externalsecret openclaw-secret -n openclaw \
+  force-sync=$(date +%s) --overwrite
+
+# Port-forward for local testing (bypasses Tailscale)
+kubectl port-forward -n openclaw svc/openclaw 18789:18789
+
+# Check ArgoCD application sync status
+kubectl get application openclaw -n argocd
+```
+
+### OpenClaw CLI (via kubectl exec)
+
+```bash
+# Gateway health check
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js health
+
+# List paired and pending devices
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list
+
+# Approve a pending device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices approve <requestId>
+
+# Revoke a device
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices revoke --device <id> --role <role>
+
+# Print dashboard URL with embedded token
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js dashboard --no-open
+
+# List connected channels
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js channels status
+
+# Run diagnostics
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js doctor
+
+# View/edit gateway config
+kubectl exec -n openclaw deploy/openclaw -- node dist/index.js config get
+```
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `disconnected (1008): pairing required` | New browser/device not approved | Run `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list` then `devices approve <requestId>` |
-| `disconnected (1008): unauthorized: gateway token missing` | Token not entered in UI | Open Control UI settings and paste the `OPENCLAW_GATEWAY_TOKEN` value |
-| `ErrImageNeverPull` | Image not built locally | Run `./scripts/build-openclaw.sh` |
-| Pod `CrashLoopBackOff` | Missing secrets or bad config | Check `kubectl logs -n openclaw deploy/openclaw` |
-| ExternalSecret `SecretSyncedError` | Secret not in Infisical | Add missing key to Infisical `homelab / prod` |
-| `connection refused` on :30789 | Pod not running | `kubectl get pods -n openclaw` |
-| Health check failing | Gateway still starting | Wait 30s; check logs for startup errors |
+| `disconnected (1008): pairing required` | New browser/device needs approval | `kubectl exec -n openclaw deploy/openclaw -- node dist/index.js devices list` then `devices approve <requestId>` |
+| `unauthorized: gateway token missing` | Token not set in UI settings | Open Control UI settings, paste the `OPENCLAW_GATEWAY_TOKEN` |
+| `ErrImageNeverPull` | Docker image not built locally | Run `./scripts/build-openclaw.sh` |
+| Pod `CrashLoopBackOff` | Missing secrets or config error | `kubectl logs -n openclaw deploy/openclaw` — check for missing env vars |
+| ExternalSecret `SecretSyncedError` | Secret key missing in Infisical | Add the missing key to Infisical `homelab / prod /` |
+| `connection refused` on `:30789` | Pod not running or not ready | `kubectl get pods -n openclaw` — wait for `Running` status |
+| Health check `/health` failing | Gateway still starting up | Wait 30s for initial startup; check logs for errors |
+| 401 Unauthorized on gateway | Wrong `OPENCLAW_GATEWAY_TOKEN` | Verify the token in Infisical matches what you use in requests |
+| Model API errors | Invalid or expired API key | Update the key in Infisical; force ESO re-sync; restart pod |
+| Tailscale URL not responding | `tailscale serve` not configured | Run `tailscale serve --bg --https 8447 http://localhost:30789` |

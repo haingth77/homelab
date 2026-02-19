@@ -185,8 +185,11 @@ env:
 | ExternalSecret | Namespace | K8s Secret Created | Keys | Consumed By |
 |---|---|---|---|---|
 | `postgresql-secret` | `gitea-system` | `postgresql-secret` | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB`, `GITEA_DB_PASSWORD` | PostgreSQL Deployment env vars; Gitea DB password |
-| `gitea-secret` | `gitea-system` | `gitea-secret` | `GITEA_SECRET_KEY` | Gitea Deployment `GITEA__security__SECRET_KEY` |
+| `gitea-secret` | `gitea-system` | `gitea-secret` | `GITEA_SECRET_KEY`, `GITEA_OAUTH_CLIENT_SECRET` | Gitea Deployment `GITEA__security__SECRET_KEY`; Gitea OIDC init job |
 | `gitea-admin-secret` | `gitea-system` | `gitea-admin-secret` | `GITEA_ADMIN_USERNAME`, `GITEA_ADMIN_PASSWORD`, `GITEA_ADMIN_EMAIL` | `gitea-admin-init` PostSync Job |
+| `authentik-secret` | `authentik` | `authentik-secret` | `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_BOOTSTRAP_PASSWORD`, `AUTHENTIK_BOOTSTRAP_TOKEN`, `AUTHENTIK_POSTGRESQL__PASSWORD`, `pg-password` | Authentik server + worker pods; embedded PostgreSQL |
+| `grafana-secret` | `monitoring` | `grafana-secret` | `admin-user`, `admin-password`, `oauth-client-id`, `oauth-client-secret` | Grafana admin login; Grafana OIDC via Authentik |
+| `openclaw-secret` | `openclaw` | `openclaw-secret` | `OPENCLAW_GATEWAY_TOKEN`, `GEMINI_API_KEY` | OpenClaw gateway env vars |
 
 ## Operational Commands
 

@@ -115,6 +115,8 @@ flowchart TD
                     s13["GRAFANA_ADMIN_PASSWORD"]
                     s14["GRAFANA_OAUTH_CLIENT_SECRET"]
                     s15["GITEA_OAUTH_CLIENT_SECRET"]
+                    s16["OPENCLAW_GATEWAY_TOKEN"]
+                    s17["GEMINI_API_KEY"]
                 end
             end
         end
@@ -154,6 +156,13 @@ flowchart TD
 | `GRAFANA_ADMIN_PASSWORD` | Grafana ExternalSecret | Break-glass admin access | `openssl rand -hex 12` |
 | `GRAFANA_OAUTH_CLIENT_SECRET` | Grafana ExternalSecret | OIDC client secret for Authentik | Generated when creating Authentik provider |
 | `GITEA_OAUTH_CLIENT_SECRET` | Gitea ExternalSecret | OIDC client secret for Authentik | Generated when creating Authentik provider |
+
+### AI Gateway Credentials
+
+| Key | Used By | Value Constraints | How to Generate |
+|---|---|---|---|
+| `OPENCLAW_GATEWAY_TOKEN` | OpenClaw ExternalSecret | Any hex string | `openssl rand -hex 32` |
+| `GEMINI_API_KEY` | OpenClaw ExternalSecret | Valid Google Gemini API key | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
 > **ArgoCD OIDC client secret** is managed via Terraform (`argocd_oidc_client_secret` in tfvars), not by ESO. It is injected into `argocd-secret` via the `set_sensitive` Helm value in `terraform/argocd.tf`.
 

@@ -1,6 +1,6 @@
 # Homelab
 
-A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Gitea, PostgreSQL, Kubernetes Dashboard, and OpenClaw AI gateway -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
+A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Authentik SSO, Gitea, PostgreSQL, Grafana + Prometheus, Infisical, and OpenClaw AI gateway -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
 
 ## Architecture
 
@@ -38,8 +38,13 @@ flowchart TD
             GiteaSvc["Gitea Service\nNodePort :30300"]
         end
 
-        subgraph dashNs["kubernetes-dashboard namespace"]
-            DashPod["Dashboard Pod\nNodePort :30444"]
+        subgraph authentikNs["authentik namespace"]
+            AuthentikPod["Authentik SSO\nNodePort :30500"]
+        end
+
+        subgraph monNs["monitoring namespace"]
+            GrafanaPod["Grafana\nNodePort :30090"]
+            PromPod["Prometheus"]
         end
 
         subgraph openclawNs["openclaw namespace"]
@@ -55,17 +60,21 @@ flowchart TD
     ArgoCD -- "App of Apps" --> infisicalNs
     ArgoCD -- "App of Apps" --> esoNs
     ArgoCD -- "App of Apps" --> giteaNs
-    ArgoCD -- "App of Apps" --> dashNs
+    ArgoCD -- "App of Apps" --> authentikNs
+    ArgoCD -- "App of Apps" --> monNs
     ArgoCD -- "App of Apps" --> openclawNs
     ESO --> CSS
     CSS -- "ExternalSecret" --> GiteaPod
     CSS -- "ExternalSecret" --> PostgresPod
     CSS -- "ExternalSecret" --> OpenClawPod
-    TServe -- ":443 -> :30300" --> GiteaSvc
+    CSS -- "ExternalSecret" --> AuthentikPod
+    CSS -- "ExternalSecret" --> GrafanaPod
+    TServe -- ":443 -> :30500" --> AuthentikPod
     TServe -- ":8443 -> :30080" --> ArgoCD
-    TServe -- ":8444 -> :30444" --> DashPod
+    TServe -- ":8444 -> :30090" --> GrafanaPod
     TServe -- ":8445 -> :30445" --> InfisicalSvc
-    TServe -- ":8446 -> :30789" --> OpenClawPod
+    TServe -- ":8446 -> :30300" --> GiteaSvc
+    TServe -- ":8447 -> :30789" --> OpenClawPod
 ```
 
 ## Repository Structure
@@ -73,7 +82,10 @@ flowchart TD
 ```
 homelab/
 ├── README.md
+├── mkdocs.yml                     # MkDocs Material site config
+├── Dockerfile.openclaw            # Homelab overlay for OpenClaw image
 ├── .gitignore                     # Excludes terraform.tfvars and .terraform/
+├── .github/workflows/docs.yml    # GitHub Pages deploy on push to main
 ├── terraform/                     # Bootstrap layer (run once, not GitOps)
 │   ├── providers.tf               # kubernetes + helm provider config
 │   ├── argocd.tf                  # ArgoCD Helm release + root Application CR
@@ -81,28 +93,21 @@ homelab/
 │   ├── variables.tf               # Variable declarations
 │   ├── outputs.tf                 # Useful post-apply instructions
 │   └── terraform.tfvars.example   # Template — copy to terraform.tfvars and fill in
-├── agents/                        # AI agent skill definitions
-│   ├── root_rules.md              # Shared rules all agents follow
-│   ├── devops_sre_agent/          # Infrastructure & reliability
-│   ├── software_engineer_agent/   # Code development
-│   ├── qa_tester_agent/           # Testing & quality
-│   ├── product_manager_agent/     # Product planning
-│   ├── data_scientist_agent/      # Data analysis
-│   └── security_analyst_agent/    # Security operations
-├── docs/                          # Architecture & networking docs
-│   └── networking.md              # Tailscale + NodePort deep dive
 ├── k8s/                           # Kubernetes manifests (GitOps root)
 │   └── apps/
-│       ├── argocd/                # App of Apps — Application CRs only
+│       ├── argocd/                # App of Apps — AppProjects + Application CRs
+│       ├── authentik/             # Authentik SSO ExternalSecret
 │       ├── external-secrets/      # ESO ClusterSecretStore config
-│       ├── infisical/             # Infisical deployment (Helm via ArgoCD App)
-│       ├── gitea/                 # Gitea manifests (ExternalSecret, no plain Secrets)
-│       ├── kubernetes-dashboard/  # Cluster monitoring dashboard
-│       ├── openclaw/              # OpenClaw AI gateway (locally built image)
-│       └── postgresql/            # PostgreSQL manifests (ExternalSecret, no plain Secrets)
-├── openclaw/                      # OpenClaw source (git submodule → github.com/OpenClaw/OpenClaw)
-├── scripts/                       # Helper scripts (image builds, etc.)
-└── skills/                        # Shared agent skill modules
+│       ├── infisical/             # (Helm chart managed by Terraform-created Application)
+│       ├── gitea/                 # Gitea kustomize manifests + ExternalSecret
+│       ├── monitoring/            # Grafana ExternalSecret
+│       ├── openclaw/              # OpenClaw AI gateway kustomize manifests
+│       └── postgresql/            # PostgreSQL kustomize manifests + ExternalSecret
+├── docs/                          # MkDocs documentation site
+├── agents/workspaces/             # OpenClaw agent AGENTS.md personalities
+├── skills/                        # OpenClaw homelab-specific skills
+├── openclaw/                      # OpenClaw source (git submodule)
+└── scripts/                       # Helper scripts (image builds, etc.)
 ```
 
 ## GitOps Flow
@@ -132,12 +137,13 @@ sequenceDiagram
 | Service | Source | Namespace | Access |
 |---------|--------|-----------|--------|
 | Argo CD | Helm chart via Terraform | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443` |
+| Authentik (SSO) | Helm chart via ArgoCD | `authentik` | `https://holdens-mac-mini.story-larch.ts.net` |
 | Infisical | Helm chart via ArgoCD | `infisical` | `https://holdens-mac-mini.story-larch.ts.net:8445` |
 | External Secrets Operator | Helm chart via ArgoCD | `external-secrets` | internal only |
-| Gitea | Kustomize via ArgoCD | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net` |
+| Grafana + Prometheus | Helm chart via ArgoCD | `monitoring` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
+| Gitea | Kustomize via ArgoCD | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net:8446` |
 | PostgreSQL | Kustomize via ArgoCD | `gitea-system` | ClusterIP `postgresql:5432` (internal only) |
-| K8s Dashboard | Kustomize via ArgoCD | `kubernetes-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
-| OpenClaw | Kustomize via ArgoCD | `openclaw` | `https://holdens-mac-mini.story-larch.ts.net:8446` |
+| OpenClaw | Kustomize via ArgoCD | `openclaw` | `https://holdens-mac-mini.story-larch.ts.net:8447` |
 
 ## Quick Start
 
@@ -170,12 +176,6 @@ terraform apply
 
 This installs ArgoCD via Helm, creates all bootstrap K8s Secrets (never in git), and registers the root ArgoCD Application. After apply completes, ArgoCD will auto-sync and deploy every other service.
 
-```bash
-# Get the initial ArgoCD admin password
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-```
-
 ### 3. Populate secrets in Infisical
 
 Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the Infisical UI and create the following secrets in the `homelab` project under the `prod` environment. The project slug **must** be `homelab`:
@@ -187,6 +187,16 @@ Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the
 | `POSTGRES_DB` | `gitea` |
 | `GITEA_DB_PASSWORD` | Same as `POSTGRES_PASSWORD` |
 | `GITEA_SECRET_KEY` | Random base64 string (`openssl rand -base64 32`) |
+| `GITEA_ADMIN_USERNAME` | Gitea admin username |
+| `GITEA_ADMIN_PASSWORD` | Gitea admin password (`openssl rand -hex 12`) |
+| `GITEA_ADMIN_EMAIL` | Gitea admin email |
+| `AUTHENTIK_SECRET_KEY` | Cookie signing key (`openssl rand -hex 32`) |
+| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Authentik admin password |
+| `AUTHENTIK_BOOTSTRAP_TOKEN` | Authentik API token (`openssl rand -hex 32`) |
+| `AUTHENTIK_POSTGRES_PASSWORD` | Authentik PostgreSQL password (`openssl rand -hex 12`) |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (`openssl rand -hex 12`) |
+| `GRAFANA_OAUTH_CLIENT_SECRET` | Generated when creating Authentik OIDC provider for Grafana |
+| `GITEA_OAUTH_CLIENT_SECRET` | Generated when creating Authentik OIDC provider for Gitea |
 | `OPENCLAW_GATEWAY_TOKEN` | Random hex string (`openssl rand -hex 32`) |
 | `GEMINI_API_KEY` | Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
@@ -197,22 +207,24 @@ Then create a Machine Identity in Infisical (`Settings → Machine Identities �
 Run once on the Mac mini (persists across reboots):
 
 ```bash
-tailscale serve --bg http://localhost:30300                       # Gitea
+tailscale serve --bg http://localhost:30500                       # Authentik (SSO portal)
 tailscale serve --bg --https 8443 http://localhost:30080          # ArgoCD
-tailscale serve --bg --https 8444 https+insecure://localhost:30444 # K8s Dashboard
+tailscale serve --bg --https 8444 http://localhost:30090          # Grafana
 tailscale serve --bg --https 8445 http://localhost:30445          # Infisical
-tailscale serve --bg --https 8446 http://localhost:30789          # OpenClaw
+tailscale serve --bg --https 8446 http://localhost:30300          # Gitea
+tailscale serve --bg --https 8447 http://localhost:30789          # OpenClaw
 
 tailscale serve status
 ```
 
 Access URLs (any Tailscale device):
 
-- Gitea: `https://holdens-mac-mini.story-larch.ts.net`
+- Authentik (SSO): `https://holdens-mac-mini.story-larch.ts.net`
 - ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
-- K8s Dashboard: `https://holdens-mac-mini.story-larch.ts.net:8444`
+- Grafana: `https://holdens-mac-mini.story-larch.ts.net:8444`
 - Infisical: `https://holdens-mac-mini.story-larch.ts.net:8445`
-- OpenClaw: `https://holdens-mac-mini.story-larch.ts.net:8446`
+- Gitea: `https://holdens-mac-mini.story-larch.ts.net:8446`
+- OpenClaw: `https://holdens-mac-mini.story-larch.ts.net:8447`
 
 ### Verify Deployment
 
@@ -221,12 +233,10 @@ Access URLs (any Tailscale device):
 kubectl get applications -n argocd -w
 
 # Check ExternalSecrets resolved correctly
-kubectl get externalsecret -n gitea-system
+kubectl get externalsecret -A
 
 # Check running pods
-kubectl get pods -n gitea-system
-kubectl get pods -n infisical
-kubectl get pods -n openclaw
+kubectl get pods -A | grep -v Running | grep -v Completed
 ```
 
 ## Documentation
@@ -237,19 +247,20 @@ kubectl get pods -n openclaw
 | [docs/bootstrap.md](docs/bootstrap.md) | Step-by-step setup from scratch: prerequisites, secrets generation, Terraform, Infisical, Tailscale |
 | [docs/secret-management.md](docs/secret-management.md) | How secrets flow from Infisical → ESO → Kubernetes; adding secrets; rotating credentials |
 | [docs/networking.md](docs/networking.md) | Tailscale Serve + NodePort architecture, request path, TLS, full port map, troubleshooting |
+| [docs/authentik.md](docs/authentik.md) | Authentik SSO, OIDC provider setup, per-service integration |
+| [docs/monitoring.md](docs/monitoring.md) | Grafana + Prometheus stack, dashboards, SSO integration |
+| [docs/openclaw.md](docs/openclaw.md) | OpenClaw AI gateway deployment, image builds, multi-agent architecture |
+| [docs/ai-agents.md](docs/ai-agents.md) | Cursor rules + OpenClaw agents/skills, when to use which |
 | [terraform/README.md](terraform/README.md) | All Terraform variables, what resources are managed, day-2 operations |
 | [k8s/apps/argocd/README.md](k8s/apps/argocd/README.md) | App of Apps pattern, sync waves, adding new applications |
 | [k8s/apps/infisical/README.md](k8s/apps/infisical/README.md) | Infisical deployment, first-time setup, machine identity, bootstrap secrets |
 | [k8s/apps/external-secrets/README.md](k8s/apps/external-secrets/README.md) | ClusterSecretStore, ExternalSecret pattern, adding secrets for new services |
 | [k8s/apps/gitea/README.md](k8s/apps/gitea/README.md) | Config seeding via init container, env var overrides, ExternalSecret integration |
 | [k8s/apps/postgresql/README.md](k8s/apps/postgresql/README.md) | Database configuration, pg_hba.conf, PGDATA layout, password management |
-| [k8s/apps/kubernetes-dashboard/README.md](k8s/apps/kubernetes-dashboard/README.md) | Remote cluster monitoring, authentication, mobile access |
-| [docs/openclaw.md](docs/openclaw.md) | OpenClaw AI gateway deployment, image builds, secrets, operations |
-| [k8s/apps/openclaw/README.md](k8s/apps/openclaw/README.md) | OpenClaw k8s manifests, updating, troubleshooting |
 
 ## Future Plans
 
-1. **Observability** -- Prometheus, Grafana, Loki for monitoring and logging
-2. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
-3. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
-4. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning
+1. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
+2. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
+3. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning
+4. **Logging** -- Loki for centralized log aggregation

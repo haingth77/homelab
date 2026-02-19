@@ -36,3 +36,7 @@ Never put secret values in manifests. Use an `ExternalSecret` resource that refe
 - Every service directory must have a `kustomization.yaml` with a `resources:` list.
 - Use `namespace.yaml` only when the service owns its namespace creation.
 - Prefer `CreateNamespace=true` in the ArgoCD Application syncOptions unless another app already creates the namespace.
+
+## Documentation
+
+Every `k8s/apps/<service>/` directory **must** have a `README.md`. This README is the single source of truth for that service's documentation — `docs/<service>.md` is just a thin `include-markdown` wrapper. See `homelab.mdc` for the full documentation rule and README structure template.
