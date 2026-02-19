@@ -47,3 +47,17 @@ data:
     
     [queue]
     TYPE = channel
+    
+    [service]
+    DISABLE_REGISTRATION = false
+    ALLOW_ONLY_EXTERNAL_REGISTRATION = true
+    ENABLE_NOTIFY_MAIL = false
+    
+    [openid]
+    ENABLE_OPENID_SIGNIN = false
+    ENABLE_OPENID_SIGNUP = true
+    
+    [oauth2_client]
+    ENABLE_AUTO_REGISTRATION = true
+    ACCOUNT_LINKING = auto
+    USERNAME = nickname

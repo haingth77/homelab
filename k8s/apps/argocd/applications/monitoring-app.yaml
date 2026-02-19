@@ -39,6 +39,8 @@ spec:
           grafana.ini:
             server:
               root_url: https://holdens-mac-mini.story-larch.ts.net:8444
+            auth:
+              disable_login_form: true
             auth.generic_oauth:
               enabled: true
               name: Authentik
@@ -48,9 +50,9 @@ spec:
               scopes: openid email profile
               auth_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/authorize/
               token_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/token/
-              api_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/userinfo/
+              api_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/userinfo
               role_attribute_path: contains(groups[*], 'authentik Admins') && 'Admin' || 'Viewer'
-              auto_login: false
+              auto_login: true
           extraSecretMounts:
             - name: oauth-secret
               secretName: grafana-secret

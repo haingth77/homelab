@@ -87,6 +87,16 @@ resource "helm_release" "argocd" {
     value = var.argocd_oidc_client_secret
   }
 
+  # Hide the local admin login form — force SSO via Authentik.
+  set {
+    name  = "configs.params.server\\.dex\\.server"
+    value = ""
+  }
+  set {
+    name  = "configs.cm.admin\\.enabled"
+    value = "false"
+  }
+
   depends_on = [kubernetes_namespace.argocd]
 }
 
