@@ -155,6 +155,7 @@ Every action is traceable to the specific agent that performed it:
 
 - OpenClaw Docker image built locally (see [Build the Image](#build-the-image))
 - Secrets added to Infisical (see [Secrets](#secrets))
+- Ollama installed on the host with `qwen2.5-coder:7b` pulled (see [Local Model (Ollama)](#local-model-ollama))
 
 ### Build the Image
 
@@ -227,6 +228,59 @@ To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_
 ```
 
 4. Push to `main` — ArgoCD syncs the change automatically.
+
+### Local Model (Ollama)
+
+Ollama runs on the Mac mini host and provides a local fallback model when Gemini hits rate limits. The OpenClaw pod reaches Ollama via OrbStack's `host.internal` DNS.
+
+**Model strategy:** Gemini 2.5 Pro is the primary model for all agents. When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local Ollama model (`qwen2.5-coder:7b`). This is configured in `agents.defaults.model.fallbacks` in the configmap.
+
+#### Setup (one-time, on the host)
+
+```bash
+# Install Ollama
+brew install ollama
+
+# Start as a background service (auto-starts on boot)
+brew services start ollama
+
+# Pull the model
+ollama pull qwen2.5-coder:7b
+```
+
+#### Model choice rationale
+
+| Model | Size | Context | Why |
+|---|---|---|---|
+| `qwen2.5-coder:7b` | 4.7 GB | 32K tokens | Strong tool-calling and code generation; fits comfortably in 16GB alongside K8s workloads |
+
+The Mac mini has 16GB unified memory. With K8s and macOS overhead (~10GB), a 7B model (~5GB at Q4_K_M) leaves headroom for stable operation.
+
+#### Verify Ollama is running
+
+```bash
+# On the host
+ollama list
+curl -sf http://127.0.0.1:11434/api/tags | jq '.models[].name'
+
+# From inside the OpenClaw pod
+kubectl exec -n openclaw deploy/openclaw -- \
+  wget -qO- http://host.internal:11434/api/tags | jq '.models[].name'
+```
+
+#### Switching models
+
+To use a different Ollama model, pull it and update the configmap:
+
+```bash
+# Pull a new model
+ollama pull <model>
+
+# Update configmap.yaml:
+# 1. Change models.providers.ollama.models[0].id
+# 2. Change agents.defaults.model.fallbacks
+# Push to main — ArgoCD syncs
+```
 
 ### Deploy
 
@@ -402,6 +456,8 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 |---|---|---|---|
 | `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
 | `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
+| `agents.defaults.model` | `primary` / `fallbacks` | Gemini primary, Ollama fallback | Gemini for quality; Ollama local model as rate-limit fallback |
+| `models.providers.ollama` | `baseUrl` | `http://host.internal:11434/v1` | Ollama running on the Mac mini host, reachable from pod via OrbStack DNS |
 | `tools.agentToAgent` | `enabled` / `allow` | All 5 agents | Enables inter-agent communication |
 | `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
@@ -581,4 +637,7 @@ kubectl exec -n openclaw deploy/openclaw -- node dist/index.js config get
 | Health check `/health` failing | Gateway still starting up | Wait 30s for initial startup; check logs for errors |
 | 401 Unauthorized on gateway | Wrong `OPENCLAW_GATEWAY_TOKEN` | Verify the token in Infisical matches what you use in requests |
 | Model API errors | Invalid or expired API key | Update the key in Infisical; force ESO re-sync; restart pod |
+| Gemini 429 rate limit | Gemini free tier exhausted | Automatic fallback to Ollama; or wait for quota reset; or add more Gemini API keys |
+| Ollama fallback not working | Ollama not running on host | `brew services start ollama` on the host; verify with `curl http://127.0.0.1:11434/api/tags` |
+| Ollama unreachable from pod | `host.internal` DNS issue | `kubectl exec -n openclaw deploy/openclaw -- wget -qO- http://host.internal:11434/api/tags` to diagnose |
 | Tailscale URL not responding | `tailscale serve` not configured | Run `tailscale serve --bg --https 8447 http://localhost:30789` |

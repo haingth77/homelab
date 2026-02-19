@@ -68,11 +68,36 @@ data:
           }
         ],
         "defaults": {
+          "model": {
+            "primary": "google/gemini-2.5-pro",
+            "fallbacks": ["ollama/qwen2.5-coder:7b"]
+          },
           "subagents": {
             "maxSpawnDepth": 2,
             "maxConcurrent": 4,
             "maxChildrenPerAgent": 3,
             "archiveAfterMinutes": 120
+          }
+        }
+      },
+      "models": {
+        "mode": "merge",
+        "providers": {
+          "ollama": {
+            "baseUrl": "http://host.internal:11434/v1",
+            "apiKey": "ollama",
+            "api": "openai-completions",
+            "models": [
+              {
+                "id": "qwen2.5-coder:7b",
+                "name": "Qwen 2.5 Coder 7B (local)",
+                "reasoning": false,
+                "input": ["text"],
+                "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+                "contextWindow": 32768,
+                "maxTokens": 8192
+              }
+            ]
           }
         }
       },
