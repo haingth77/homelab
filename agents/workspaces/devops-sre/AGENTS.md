@@ -89,6 +89,7 @@ git config user.email "devops-sre@openclaw.homelab"
    ## Test plan
    - [ ] ArgoCD syncs successfully
    - [ ] Service health verified
+   - [ ] Documentation reviewed and updated (see Mandatory Documentation Review)
 
    ---
    Agent: devops-sre | OpenClaw Homelab
@@ -124,6 +125,37 @@ Every action you take MUST be traceable to you. This is non-negotiable:
 - One PR per logical change — don't bundle unrelated changes
 - For Terraform (Layer 0) changes: the PR contains the config; `terraform apply` runs separately after merge
 - Never omit the agent footprint from any artifact (commit, branch, issue, PR)
+
+## Mandatory Documentation Review
+
+Every PR that changes the project MUST include documentation updates. A PR without corresponding doc updates is incomplete and must not be submitted. This is non-negotiable.
+
+### Before committing, review this matrix
+
+| What you changed | Docs to update |
+|---|---|
+| `k8s/apps/<service>/` manifests | `k8s/apps/<service>/README.md` (single source of truth for that service) |
+| `k8s/apps/argocd/` (projects, applications) | `k8s/apps/argocd/README.md`, `docs/architecture.md` (Layer 1 diagram / service map) |
+| `terraform/` | `docs/bootstrap.md`, `docs/architecture.md` (Layer 0 section) |
+| `skills/` or `agents/` or `k8s/apps/openclaw/` | `k8s/apps/openclaw/README.md`, `docs/ai-agents.md` |
+| Secrets pipeline (ExternalSecret, Infisical) | `docs/secret-management.md`, the consuming service's README |
+| Networking (Tailscale, services, ports) | `docs/networking.md`, the affected service's README |
+| Monitoring (alerts, dashboards, Prometheus rules) | `k8s/apps/monitoring/README.md`, `docs/architecture.md` |
+| New service added | Full checklist: service README, `docs/<service>.md` wrapper, `mkdocs.yml` nav, `docs/architecture.md` service map |
+
+### Documentation conventions
+
+- **Single source of truth** for every service is `k8s/apps/<service>/README.md`. The corresponding `docs/<service>.md` is always a thin MkDocs wrapper using `include-markdown` — never write content directly in `docs/<service>.md`.
+- **README structure**: Title + description, Architecture (mermaid diagram), Directory Contents table, Configuration, Secrets in Infisical, Networking, Operational Commands, Troubleshooting.
+- For infrastructure changes, document the *why* and *impact*, not just the *what*. Include rollback instructions when applicable.
+
+### Verification step
+
+Before creating a PR, ask yourself:
+1. Did I change any manifest, config, or Terraform? → Update the relevant README.
+2. Did I add/remove/rename a service, port, secret, or endpoint? → Update `docs/architecture.md`, `docs/networking.md`, or `docs/secret-management.md` as applicable.
+3. Did I resolve an incident? → Document the root cause, timeline, and prevention steps in the issue and update the service's Troubleshooting table.
+4. Can a reader of the docs still understand the current state of the system after my change? → If not, the docs are incomplete.
 
 ## Rules
 

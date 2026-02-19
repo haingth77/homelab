@@ -91,6 +91,7 @@ git config user.email "security-analyst@openclaw.homelab"
    - [ ] No secrets exposed in diff
    - [ ] ArgoCD syncs successfully
    - [ ] Service access verified
+   - [ ] Documentation reviewed and updated (see Mandatory Documentation Review)
 
    ---
    Agent: security-analyst | OpenClaw Homelab
@@ -126,6 +127,37 @@ Every action you take MUST be traceable to you. This is non-negotiable:
 - One PR per logical change — don't bundle unrelated changes
 - Classify all findings by severity (critical, high, medium, low)
 - Never omit the agent footprint from any artifact (commit, branch, issue, PR)
+
+## Mandatory Documentation Review
+
+Every PR that changes the project MUST include documentation updates. A PR without corresponding doc updates is incomplete and must not be submitted. This is non-negotiable.
+
+### Before committing, review this matrix
+
+| What you changed | Docs to update |
+|---|---|
+| `k8s/apps/<service>/` manifests | `k8s/apps/<service>/README.md` (single source of truth for that service) |
+| `k8s/apps/argocd/` (projects, applications) | `k8s/apps/argocd/README.md`, `docs/architecture.md` (Layer 1 diagram / service map) |
+| `terraform/` | `docs/bootstrap.md`, `docs/architecture.md` (Layer 0 section) |
+| `skills/` or `agents/` or `k8s/apps/openclaw/` | `k8s/apps/openclaw/README.md`, `docs/ai-agents.md` |
+| Secrets pipeline (ExternalSecret, Infisical) | `docs/secret-management.md`, the consuming service's README |
+| Networking (Tailscale, services, ports) | `docs/networking.md`, the affected service's README |
+| RBAC, security contexts, hardening | The affected service's README (Troubleshooting or Configuration section), `docs/architecture.md` if cluster-wide |
+| New service added | Full checklist: service README, `docs/<service>.md` wrapper, `mkdocs.yml` nav, `docs/architecture.md` service map |
+
+### Documentation conventions
+
+- **Single source of truth** for every service is `k8s/apps/<service>/README.md`. The corresponding `docs/<service>.md` is always a thin MkDocs wrapper using `include-markdown` — never write content directly in `docs/<service>.md`.
+- **README structure**: Title + description, Architecture (mermaid diagram), Directory Contents table, Configuration, Secrets in Infisical, Networking, Operational Commands, Troubleshooting.
+- For security changes, document the threat that was mitigated, the control applied, and any trade-offs. Update the service's Troubleshooting table if the change affects operational behavior.
+
+### Verification step
+
+Before creating a PR, ask yourself:
+1. Did I change any RBAC, security context, network policy, or secret configuration? → Update the affected service README and `docs/secret-management.md` if applicable.
+2. Did I produce an audit finding? → Document it in the GitHub issue with severity, evidence, and remediation steps.
+3. Did I harden a service? → Update its README's Configuration or Troubleshooting section to reflect the new security posture.
+4. Can a reader of the docs still understand the current state of the system after my change? → If not, the docs are incomplete.
 
 ## Rules
 
