@@ -180,7 +180,14 @@ The deployment runs four agents, each with its own workspace and personality:
 
 Configuration is in `configmap.yaml` (mounted at `/config/openclaw.json`). Agent personalities live in `agents/workspaces/<id>/AGENTS.md` at the repo root and are copied into the pod workspace on every restart by the init container.
 
-Homelab-specific skills are mounted from the host at `/skills` via hostPath. Skill definitions live in `skills/` at the repo root.
+Homelab-specific skills are mounted from the host at `/skills` via hostPath. Skill definitions live in `skills/` at the repo root. Each agent has a `skills` allowlist in the configmap:
+
+| Agent | Assigned Skills |
+|---|---|
+| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management` |
+| `devops-sre` | `devops-sre`, `gitops`, `secret-management` |
+| `software-engineer` | `software-engineer` |
+| `security-analyst` | `security-analyst`, `secret-management` |
 
 ### Sub-agent spawning
 
@@ -195,7 +202,7 @@ Sub-agents run in isolated sessions with `maxSpawnDepth: 2` (orchestrator patter
 
 ### Adding a new agent
 
-1. Add the agent to `configmap.yaml` under `agents.list`
+1. Add the agent to `configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `deployment.yaml`
 4. Add it to `tools.agentToAgent.allow` in the configmap
@@ -204,7 +211,7 @@ Sub-agents run in isolated sessions with `maxSpawnDepth: 2` (orchestrator patter
 ### Adding a new skill
 
 1. Create `skills/<name>/SKILL.md` with OpenClaw-compatible frontmatter
-2. The skill is auto-loaded via `skills.load.extraDirs` in the config
+2. Add the skill name to the `skills` array of each agent that should use it in the configmap
 3. Push to `main` and restart the pod
 
 ## Troubleshooting

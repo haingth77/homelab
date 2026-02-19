@@ -326,21 +326,29 @@ flowchart TD
     HA -- "sessions_spawn" --> SE
     HA -- "sessions_spawn" --> SA
 
-    subgraph skills["Shared Skills (/skills)"]
+    subgraph skills["Skills (/skills)"]
         S1["homelab-admin"]
         S2["devops-sre"]
         S3["software-engineer"]
         S4["security-analyst"]
         S5["gitops"]
         S6["secret-management"]
-        S7["Documentation"]
     end
 
-    HA --> skills
-    DS --> skills
-    SE --> skills
-    SA --> skills
+    HA --> S1 & S5 & S6
+    DS --> S2 & S5 & S6
+    SE --> S3
+    SA --> S4 & S6
 ```
+
+Each agent has a `skills` allowlist in the configmap that restricts which skills it can see (omit = all skills; empty array = none):
+
+| Agent | Assigned Skills |
+|---|---|
+| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management` |
+| `devops-sre` | `devops-sre`, `gitops`, `secret-management` |
+| `software-engineer` | `software-engineer` |
+| `security-analyst` | `security-analyst`, `secret-management` |
 
 ### Agents
 
@@ -383,7 +391,7 @@ Sub-agents announce results back up the chain. Configure limits in the ConfigMap
 
 ### Adding a new agent
 
-1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
 4. Add the agent ID to `tools.agentToAgent.allow` in the config
@@ -392,7 +400,7 @@ Sub-agents announce results back up the chain. Configure limits in the ConfigMap
 ### Adding a new skill
 
 1. Create `skills/<name>/SKILL.md` with OpenClaw frontmatter (`name`, `description`, optional `metadata`)
-2. The skill auto-loads via `skills.load.extraDirs: ["/skills"]` in the config
+2. Add the skill name to the `skills` array of each agent that should use it in the configmap
 3. Push to `main` and restart the pod: `kubectl rollout restart deployment/openclaw -n openclaw`
 
 ## Manifest Reference

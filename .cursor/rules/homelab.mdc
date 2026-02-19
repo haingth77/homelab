@@ -19,7 +19,31 @@ This is a GitOps-driven homelab running on a Mac mini M4 with OrbStack Kubernete
 - Never commit secrets, API keys, or credentials to git. Use the Infisical → ESO pipeline (see `skills/secret-management/SKILL.md`).
 - ArgoCD Application CRs must follow the project and label conventions in `k8s/apps/argocd/README.md` (projects: `secrets`, `data`, `apps`; labels: `app.kubernetes.io/{name,part-of,component,managed-by}`).
 - Prefer Kustomize over Helm for app workloads. Helm is only used for upstream charts (ESO, Infisical).
-- Documentation lives in `docs/` and is served by MkDocs. Keep docs updated when changing infrastructure.
+- Documentation lives in `docs/` and is served by MkDocs. See the Documentation Rule below.
+
+## Documentation Rule (mandatory)
+
+After every implementation, update the related documentation before considering the task complete. This is not optional.
+
+### What to update
+
+| Change area | Docs to update |
+|---|---|
+| `k8s/apps/<service>/` manifests | `docs/<service>.md` and the service's `k8s/apps/<service>/README.md` if it exists |
+| `k8s/apps/argocd/` (projects, applications) | `docs/argocd.md`, `docs/architecture.md` (Layer 1 diagram / service map) |
+| `terraform/` | `docs/bootstrap.md`, `docs/architecture.md` (Layer 0 section) |
+| `skills/` or `agents/` or `k8s/apps/openclaw/` | `docs/openclaw.md`, `docs/ai-agents.md`, `k8s/apps/openclaw/README.md` |
+| Secrets pipeline (ExternalSecret, Infisical) | `docs/secret-management.md` |
+| Networking (Tailscale, services, ports) | `docs/networking.md` |
+| New service added | Create `docs/<service>.md`, add it to `mkdocs.yml` nav, update `docs/architecture.md` |
+
+### Rules
+
+- If a doc file referenced above does not exist yet, create it and add it to the `nav` in `mkdocs.yml`.
+- When adding a new app, also update the repository layout and service map in `docs/architecture.md`.
+- Keep docs concise — document the *what* and *why*, not step-by-step kubectl commands.
+- Never remove documentation for existing services without explicit instruction.
+- **Always include doc changes in the same commit as the implementation** (or as a follow-up commit in the same push). Pushing to `main` triggers the GitHub Pages deploy workflow (`.github/workflows/docs.yml`), so docs go live automatically — but only if they are committed and pushed.
 
 ## Key Paths
 

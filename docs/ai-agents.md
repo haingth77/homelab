@@ -89,12 +89,25 @@ OpenClaw runs four agents in an orchestrator pattern. The `homelab-admin` agent 
 
 Agent config lives in two places:
 
-- **Identity:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, model, workspace path)
+- **Identity:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, model, workspace, skills allowlist)
 - **Personality:** `agents/workspaces/<id>/AGENTS.md` (single source of truth, copied into pod on every restart)
+
+### Per-Agent Skill Assignment
+
+Each agent has a `skills` allowlist in the configmap that restricts which skills it can see. Omitting the field means all skills; an empty array means none.
+
+| Agent | Assigned Skills |
+|---|---|
+| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management` |
+| `devops-sre` | `devops-sre`, `gitops`, `secret-management` |
+| `software-engineer` | `software-engineer` |
+| `security-analyst` | `security-analyst`, `secret-management` |
+
+Cross-cutting skills (e.g. `secret-management`) are shared across agents that need them.
 
 ### Adding a New Agent
 
-1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
 4. Add the agent ID to `tools.agentToAgent.allow` in the configmap
@@ -150,7 +163,8 @@ metadata:
 
 1. Create `skills/<name>/SKILL.md` with the frontmatter above
 2. Write operational knowledge in markdown: commands, troubleshooting tables, workflows
-3. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
+3. Add the skill name to the `skills` array of each agent that should use it in the configmap
+4. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
 
 Skills auto-load via `skills.load.extraDirs: ["/skills"]` in the OpenClaw config.
 
