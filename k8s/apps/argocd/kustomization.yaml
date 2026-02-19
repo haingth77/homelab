@@ -4,6 +4,10 @@ kind: Kustomization
 # This kustomization only contains the child Application CRs that ArgoCD
 # manages after the bootstrap — the App of Apps pattern.
 resources:
+  # AppProjects (sync-wave -1) — must exist before Applications reference them.
+  - projects/secrets.yaml
+  - projects/data.yaml
+  - projects/apps.yaml
   # infisical-app is managed by Terraform (terraform/argocd.tf) not by this kustomization.
   # This is intentional: Infisical carries sensitive Helm values (postgres/redis passwords)
   # that cannot be stored in git.

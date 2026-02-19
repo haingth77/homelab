@@ -3,8 +3,12 @@ kind: Application
 metadata:
   name: postgresql
   namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: homelab
+    homelab/tier: data
+    homelab/category: database
 spec:
-  project: default
+  project: data
   source:
     repoURL: git@github.com:holdennguyen/homelab.git
     targetRevision: HEAD

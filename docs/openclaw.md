@@ -15,6 +15,8 @@ flowchart TD
         subgraph openclawNs["openclaw namespace"]
             Svc["Service\nNodePort :30789"]
             Deploy["OpenClaw Gateway\nPort :18789"]
+            CM["ConfigMap: openclaw-config\nopenclaw.json (multi-agent)"]
+            WSCM["ConfigMap: workspace-init\nAGENTS.md templates"]
             PVC["PVC: openclaw-data\n5Gi"]
             ES["ExternalSecret:\nopenclaw-secret"]
             K8sSecret["K8s Secret:\nopenclaw-secret"]
@@ -36,6 +38,8 @@ flowchart TD
     Clients -- "WireGuard" --> TServe
     TServe --> Svc
     Svc --> Deploy
+    CM -- "/config" --> Deploy
+    WSCM -- "init container" --> PVC
     Deploy --> PVC
     ES -- "secretStoreRef" --> CSS
     CSS -- "Universal Auth" --> InfisicalSecrets
@@ -51,22 +55,28 @@ OpenClaw runs as a standard Kustomize application managed by ArgoCD, following t
 ```mermaid
 flowchart LR
     subgraph argocd["ArgoCD (App of Apps)"]
-        RootApp["argocd-apps"]
+        RootApp["argocd-apps\n(default project)"]
     end
 
-    subgraph apps["Child Applications"]
+    subgraph secretsProj["secrets project"]
+        Infisical["infisical"]
         ESO["external-secrets"]
+        ESOConfig["external-secrets-config"]
+    end
+
+    subgraph dataProj["data project"]
         PG["postgresql"]
+    end
+
+    subgraph appsProj["apps project"]
         Gitea["gitea"]
         Dash["kubernetes-dashboard"]
         OC["openclaw"]
     end
 
-    RootApp --> ESO
-    RootApp --> PG
-    RootApp --> Gitea
-    RootApp --> Dash
-    RootApp --> OC
+    RootApp --> secretsProj
+    RootApp --> dataProj
+    RootApp --> appsProj
 ```
 
 ## Deployment
@@ -301,6 +311,90 @@ cd homelab
 git submodule update --init
 ```
 
+## Multi-Agent & Skills Architecture
+
+OpenClaw runs four agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
+
+```mermaid
+flowchart TD
+    HA["homelab-admin\n(Orchestrator)"]
+    DS["devops-sre\n(Infrastructure)"]
+    SE["software-engineer\n(Development)"]
+    SA["security-analyst\n(Security)"]
+
+    HA -- "sessions_spawn" --> DS
+    HA -- "sessions_spawn" --> SE
+    HA -- "sessions_spawn" --> SA
+
+    subgraph skills["Shared Skills (/skills)"]
+        S1["homelab-admin"]
+        S2["devops-sre"]
+        S3["software-engineer"]
+        S4["security-analyst"]
+        S5["gitops"]
+        S6["secret-management"]
+        S7["Documentation"]
+    end
+
+    HA --> skills
+    DS --> skills
+    SE --> skills
+    SA --> skills
+```
+
+### Agents
+
+| Agent ID | Role | Model | Workspace |
+|---|---|---|---|
+| `homelab-admin` | Default orchestrator — coordinates tasks, delegates to sub-agents | `google/gemini-2.5-pro` | `/data/workspaces/homelab-admin` |
+| `devops-sre` | Infrastructure, K8s ops, Terraform, incident response | `google/gemini-2.5-pro` | `/data/workspaces/devops-sre` |
+| `software-engineer` | Code development, review, testing | `google/gemini-2.5-pro` | `/data/workspaces/software-engineer` |
+| `security-analyst` | Security audits, vulnerability assessment, hardening | `google/gemini-2.5-pro` | `/data/workspaces/security-analyst` |
+
+Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file, bootstrapped on first deploy by the `init-workspaces` init container.
+
+### Skills
+
+Homelab-specific skills live in `skills/` at the repo root and are mounted into the pod at `/skills` via hostPath:
+
+| Skill | Description |
+|---|---|
+| `homelab-admin` | Cluster operations, service management, GitOps workflow |
+| `devops-sre` | Infrastructure debugging, Terraform, incident response |
+| `software-engineer` | Code development, review, testing conventions |
+| `security-analyst` | Security audits, RBAC review, vulnerability assessment |
+| `gitops` | ArgoCD App of Apps pattern, sync management |
+| `secret-management` | Infisical → ESO → K8s pipeline operations |
+| `common/Documentation` | Standardized documentation generation |
+
+Skills follow the [AgentSkills](https://agentskills.io) format with OpenClaw-compatible `SKILL.md` frontmatter.
+
+### Sub-agent spawning
+
+The orchestrator pattern uses `maxSpawnDepth: 2`:
+- **Depth 0** — main agent (`homelab-admin`) receives user requests
+- **Depth 1** — orchestrator spawns specialized sub-agents via `sessions_spawn`
+- **Depth 2** — sub-agents can spawn leaf workers for parallel tasks
+
+Sub-agents announce results back up the chain. Configure limits in the ConfigMap:
+- `maxConcurrent: 4` — max parallel sub-agents
+- `maxChildrenPerAgent: 3` — max children per agent session
+- `archiveAfterMinutes: 120` — auto-cleanup of finished sub-agent sessions
+
+### Adding a new agent
+
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
+2. Add its AGENTS.md to `k8s/apps/openclaw/init-workspaces-configmap.yaml`
+3. Add the agent ID to `allowAgents` and `agentToAgent.allow` in the config
+4. Create its workspace AGENTS.md in `agents/workspaces/<id>/AGENTS.md` (source of truth)
+5. Push to `main`
+
+### Adding a new skill
+
+1. Create `skills/<name>/SKILL.md` with OpenClaw frontmatter (`name`, `description`, optional `metadata`)
+2. The skill auto-loads via `skills.load.extraDirs: ["/skills"]` in the config
+3. Push to `main` and restart the pod: `kubectl rollout restart deployment/openclaw -n openclaw`
+
 ## Manifest Reference
 
 | File | Purpose |
@@ -308,11 +402,15 @@ git submodule update --init
 | `k8s/apps/openclaw/namespace.yaml` | Dedicated `openclaw` namespace |
 | `k8s/apps/openclaw/pvc.yaml` | 5Gi PVC for state data |
 | `k8s/apps/openclaw/external-secret.yaml` | Syncs secrets from Infisical |
-| `k8s/apps/openclaw/deployment.yaml` | Gateway deployment with health probes |
+| `k8s/apps/openclaw/configmap.yaml` | Multi-agent `openclaw.json` configuration |
+| `k8s/apps/openclaw/init-workspaces-configmap.yaml` | AGENTS.md templates for workspace bootstrap |
+| `k8s/apps/openclaw/deployment.yaml` | Gateway deployment with config/skills volumes |
 | `k8s/apps/openclaw/service.yaml` | NodePort 30789 |
 | `k8s/apps/openclaw/kustomization.yaml` | Kustomize resource list |
 | `k8s/apps/argocd/applications/openclaw-app.yaml` | ArgoCD Application CR |
 | `scripts/build-openclaw.sh` | Docker image build helper |
+| `skills/` | Homelab-specific skills (mounted into pod) |
+| `agents/workspaces/` | Agent AGENTS.md source files |
 
 ## Operational Commands
 

@@ -83,12 +83,17 @@ locals {
     metadata = {
       name      = "infisical"
       namespace = "argocd"
+      labels = {
+        "app.kubernetes.io/part-of" = "homelab"
+        "homelab/tier"              = "infrastructure"
+        "homelab/category"          = "secrets"
+      }
       annotations = {
         "argocd.argoproj.io/sync-wave" = "0"
       }
     }
     spec = {
-      project = "default"
+      project = "secrets"
       source = {
         repoURL        = "https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/"
         chart          = "infisical-standalone"
@@ -199,6 +204,11 @@ locals {
     metadata = {
       name      = "argocd-apps"
       namespace = "argocd"
+      labels = {
+        "app.kubernetes.io/part-of" = "homelab"
+        "homelab/tier"              = "infrastructure"
+        "homelab/category"          = "gitops"
+      }
     }
     spec = {
       project = "default"

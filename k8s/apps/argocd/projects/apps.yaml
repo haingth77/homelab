@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: User-facing applications and services
+  sourceRepos:
+    - git@github.com:holdennguyen/homelab.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: gitea-system
+    - server: https://kubernetes.default.svc
+      namespace: kubernetes-dashboard
+    - server: https://kubernetes.default.svc
+      namespace: openclaw
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

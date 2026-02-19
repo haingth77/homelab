@@ -3,8 +3,12 @@ kind: Application
 metadata:
   name: gitea
   namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: homelab
+    homelab/tier: app
+    homelab/category: git
 spec:
-  project: default
+  project: apps
   source:
     repoURL: git@github.com:holdennguyen/homelab.git
     targetRevision: HEAD

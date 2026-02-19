@@ -3,8 +3,12 @@ kind: Application
 metadata:
   name: kubernetes-dashboard
   namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: homelab
+    homelab/tier: app
+    homelab/category: dashboard
 spec:
-  project: default
+  project: apps
   source:
     repoURL: git@github.com:holdennguyen/homelab.git
     targetRevision: HEAD

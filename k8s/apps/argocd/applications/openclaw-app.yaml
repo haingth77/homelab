@@ -3,8 +3,12 @@ kind: Application
 metadata:
   name: openclaw
   namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: homelab
+    homelab/tier: app
+    homelab/category: ai
 spec:
-  project: default
+  project: apps
   source:
     repoURL: git@github.com:holdennguyen/homelab.git
     targetRevision: HEAD
