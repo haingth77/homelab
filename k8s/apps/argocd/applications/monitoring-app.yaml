@@ -28,10 +28,11 @@ spec:
             enabled: true
             size: 2Gi
           initChownData:
-            enabled: true
-            securityContext:
-              runAsNonRoot: false
-              runAsUser: 0
+            enabled: false
+          securityContext:
+            runAsUser: 472
+            runAsGroup: 472
+            fsGroup: 472
           defaultDashboardsEnabled: true
           sidecar:
             dashboards:
