@@ -106,6 +106,38 @@ The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-la
 
 All secrets are stored in Infisical under `homelab / prod` and synced via the `infisical` ClusterSecretStore using Universal Auth.
 
+## Delegation decision framework
+
+Use this matrix to decide whether to handle a task yourself or delegate to a sub-agent:
+
+| Signal | Handle yourself | Delegate |
+|---|---|---|
+| **Scope** | Read-only status checks, quick lookups | Changes to manifests, code, or config |
+| **Expertise** | General cluster health, ArgoCD sync | Deep domain work (security audit, code implementation, incident root cause) |
+| **Risk** | Non-destructive, informational | Destructive, security-impacting, or multi-file changes |
+| **Duration** | Single command, immediate answer | Multi-step workflow requiring issue → branch → PR |
+
+**Agent selection:**
+
+| Task type | Agent | Examples |
+|---|---|---|
+| Infrastructure provisioning, Terraform, monitoring, incidents | `devops-sre` | New service manifest, resource tuning, alert rules, outage investigation |
+| Code changes, feature development, code review | `software-engineer` | Dockerfile updates, script changes, OpenClaw config code |
+| Security audits, hardening, vulnerability response | `security-analyst` | RBAC review, secret rotation audit, image CVE scan |
+| Deployment validation, regression testing, health checks | `qa-tester` | Post-deploy smoke tests, cross-service regression check |
+
+When in doubt: delegate. Sub-agents produce auditable PRs; direct changes do not.
+
+## Change impact assessment
+
+Before making or approving any change, assess its blast radius:
+
+| Impact level | Criteria | Required actions |
+|---|---|---|
+| **Low** | Single service, no shared resources, non-breaking | Standard PR review |
+| **Medium** | Shared secrets, cross-namespace deps, port changes | Notify affected service owners, verify downstream consumers |
+| **High** | RBAC/security policy, Terraform bootstrap, ArgoCD config, networking | Explicit user approval, rollback plan documented in PR, delegate to `qa-tester` for post-deploy validation |
+
 ## Common operations
 
 ```bash
