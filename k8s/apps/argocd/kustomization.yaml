@@ -16,4 +16,5 @@ resources:
   - applications/postgresql-app.yaml
   - applications/gitea-app.yaml
   - applications/monitoring-app.yaml
+  - applications/monitoring-config-app.yaml
   - applications/openclaw-app.yaml

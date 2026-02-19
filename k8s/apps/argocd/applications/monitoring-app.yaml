@@ -18,7 +18,9 @@ spec:
       valuesObject:
         # Grafana
         grafana:
-          adminPassword: admin
+          admin:
+            existingSecret: grafana-secret
+            passwordKey: admin-password
           service:
             type: NodePort
             nodePort: 30090
