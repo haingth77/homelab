@@ -10,6 +10,7 @@ spec:
   sourceRepos:
     - git@github.com:holdennguyen/homelab.git
     - https://prometheus-community.github.io/helm-charts
+    - https://charts.goauthentik.io
   destinations:
     - server: https://kubernetes.default.svc
       namespace: gitea-system
@@ -19,6 +20,8 @@ spec:
       namespace: kube-system
     - server: https://kubernetes.default.svc
       namespace: openclaw
+    - server: https://kubernetes.default.svc
+      namespace: authentik
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace

@@ -1,0 +1,82 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: identity
+    app.kubernetes.io/managed-by: argocd
+spec:
+  project: apps
+  source:
+    repoURL: https://charts.goauthentik.io
+    chart: authentik
+    targetRevision: 2025.12.4
+    helm:
+      valuesObject:
+        # Disable chart-managed secret; inject all secrets via envFrom
+        authentik:
+          enabled: false
+
+        global:
+          envFrom:
+            - secretRef:
+                name: authentik-secret
+          affinity:
+            podAntiAffinity: none
+            nodeAffinity:
+              type: none
+
+        server:
+          replicas: 1
+          service:
+            type: NodePort
+            nodePortHttp: 30500
+
+        worker:
+          replicas: 1
+
+        postgresql:
+          enabled: true
+          auth:
+            username: authentik
+            database: authentik
+            existingSecret: authentik-secret
+            secretKeys:
+              adminPasswordKey: pg-password
+              userPasswordKey: pg-password
+          primary:
+            persistence:
+              enabled: true
+              size: 2Gi
+            containerSecurityContext:
+              readOnlyRootFilesystem: false
+            resourcesPreset: "none"
+          readReplicas:
+            resourcesPreset: "none"
+          backup:
+            resourcesPreset: "none"
+          passwordUpdateJob:
+            resourcesPreset: "none"
+          volumePermissions:
+            resourcesPreset: "none"
+          metrics:
+            resourcesPreset: "none"
+
+        serviceAccount:
+          create: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
