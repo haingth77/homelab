@@ -27,6 +27,11 @@ spec:
           persistence:
             enabled: true
             size: 2Gi
+          initChownData:
+            enabled: true
+            securityContext:
+              runAsNonRoot: false
+              runAsUser: 0
           defaultDashboardsEnabled: true
           sidecar:
             dashboards:
