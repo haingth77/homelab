@@ -160,7 +160,7 @@ resource "null_resource" "infisical_app" {
   }
 
   provisioner "local-exec" {
-    command = "kubectl apply --server-side -f '${local_file.infisical_app.filename}'"
+    command = "kubectl apply --server-side --force-conflicts -f '${local_file.infisical_app.filename}'"
   }
 
   depends_on = [helm_release.argocd, local_file.infisical_app]
