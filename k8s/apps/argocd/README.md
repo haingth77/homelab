@@ -30,7 +30,8 @@ flowchart TD
         ArgoDir -- "creates" --> ESCApp["Application: external-secrets-config"]
         ArgoDir -- "creates" --> PGApp["Application: postgresql"]
         ArgoDir -- "creates" --> GiteaApp["Application: gitea"]
-        ArgoDir -- "creates" --> DashApp["Application: kubernetes-dashboard"]
+        ArgoDir -- "creates" --> MonApp["Application: monitoring"]
+        ArgoDir -- "creates" --> AuthApp["Application: authentik"]
     end
 
     AppController -- "poll every ~3min" --> git
@@ -48,7 +49,10 @@ flowchart TD
 | `applications/external-secrets-config-app.yaml` | ClusterSecretStore (sync-wave 1 — after ESO CRDs) |
 | `applications/postgresql-app.yaml` | PostgreSQL deployment in `gitea-system` namespace |
 | `applications/gitea-app.yaml` | Gitea deployment in `gitea-system` namespace |
-| `applications/kubernetes-dashboard-app.yaml` | Kubernetes Dashboard deployment |
+| `applications/monitoring-app.yaml` | kube-prometheus-stack Helm chart (Grafana + Prometheus) |
+| `applications/monitoring-config-app.yaml` | Grafana ExternalSecret (monitoring namespace) |
+| `applications/authentik-app.yaml` | Authentik SSO Helm chart |
+| `applications/authentik-config-app.yaml` | Authentik ExternalSecret (authentik namespace) |
 | `applications/openclaw-app.yaml` | OpenClaw AI gateway deployment |
 
 > **Note:** The `infisical` Application CR is **not** in this directory. It is created by `terraform/argocd.tf` because its Helm values include sensitive PostgreSQL and Redis passwords that cannot be stored in git.
@@ -75,8 +79,9 @@ flowchart LR
 
     subgraph appsProj["apps project"]
         A4["gitea"]
-        A5["kubernetes-dashboard"]
-        A6["openclaw"]
+        A5["monitoring"]
+        A6["authentik"]
+        A7["openclaw"]
     end
 
     Kustomize --> secretsProj
@@ -93,7 +98,7 @@ Sync waves control the order in which resources are applied. AppProjects must ex
 | -1 | AppProjects (`secrets`, `data`, `apps`) | Must exist before any Application references them |
 | 0 | `external-secrets` | Installs the ESO Helm chart + CRDs (`ExternalSecret`, `ClusterSecretStore`, etc.) |
 | 1 | `external-secrets-config` | Applies the `ClusterSecretStore` — requires CRDs from wave 0 to be present |
-| (default) | `postgresql`, `gitea`, `kubernetes-dashboard`, `openclaw` | No ordering requirements between them |
+| (default) | `postgresql`, `gitea`, `monitoring`, `authentik`, `openclaw` | No ordering requirements between them |
 
 ## ArgoCD Configuration
 
@@ -104,7 +109,9 @@ ArgoCD runs in **insecure mode** (`server.insecure = true`) — it serves plain 
 | `server.service.type` | `NodePort` | Terraform Helm values |
 | `server.service.nodePorts.http` | `30080` | Terraform Helm values |
 | `configs.params.server.insecure` | `true` | Terraform Helm values |
-| `configs.secret.argocdServerAdminPassword` | bcrypt hash | Terraform Helm values (`argocd_admin_password_bcrypt` tfvar) |
+| `configs.cm.oidc.config` | Authentik OIDC | Terraform Helm values (`argocd_oidc_client_secret` tfvar) |
+| `configs.rbac.policy.default` | `role:admin` | Terraform Helm values — all SSO users get admin access |
+| `configs.cm.admin.enabled` | `false` | Terraform Helm values — local admin login disabled |
 | `configs.cm.resource.customizations.ignoreDifferences.external-secrets.io_ExternalSecret` | `jsonPointers: [/metadata/finalizers]` | Terraform Helm values — prevents ESO finalizer from causing permanent OutOfSync |
 | Chart version | `7.8.0` | `terraform/variables.tf` default |
 
@@ -200,7 +207,7 @@ resources:
 
 ## Accessing the UI
 
-ArgoCD is accessible at `https://holdens-mac-mini.story-larch.ts.net:8443` from any Tailscale device.
+ArgoCD is accessible at `https://holdens-mac-mini.story-larch.ts.net:8443` from any Tailscale device. Authentication is handled exclusively via **Authentik SSO** (OIDC) — the local admin login is disabled.
 
 **One-time Tailscale Serve setup:**
 
@@ -208,18 +215,9 @@ ArgoCD is accessible at `https://holdens-mac-mini.story-larch.ts.net:8443` from 
 tailscale serve --bg --https 8443 http://localhost:30080
 ```
 
-**Admin credentials:**
+**Authentication:**
 
-The ArgoCD admin password is managed via Terraform Helm values (`argocd_admin_password_bcrypt` in `terraform/terraform.tfvars`). The plaintext is stored in Infisical as `ARGOCD_ADMIN_PASSWORD` for team reference.
-
-```bash
-# Retrieve from Infisical UI → homelab / prod → ARGOCD_ADMIN_PASSWORD
-# Or from the initial-admin-secret if it matches the hash in terraform.tfvars:
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-```
-
-To rotate the password, see [terraform/README.md — Rotate the ArgoCD Admin Password](../../../terraform/README.md).
+Click "Log in via Authentik" on the ArgoCD login page. All SSO-authenticated users receive `role:admin` access (single-user homelab). The OIDC configuration is managed in `terraform/argocd.tf`.
 
 ## Operational Commands
 

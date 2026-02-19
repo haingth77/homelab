@@ -6,7 +6,7 @@ Authentik provides **Single Sign-On (SSO)** for the homelab via **OpenID Connect
 
 | Interface | URL | Credentials |
 |---|---|---|
-| Authentik Admin | `https://holdens-mac-mini.story-larch.ts.net:8447` | akadmin / `AUTHENTIK_BOOTSTRAP_PASSWORD` from Infisical |
+| Authentik Admin | `https://holdens-mac-mini.story-larch.ts.net` | akadmin / `AUTHENTIK_BOOTSTRAP_PASSWORD` from Infisical |
 | Authentik (local) | `http://localhost:30500` | same |
 
 ## Architecture
@@ -41,7 +41,21 @@ Each service has a dedicated OIDC provider in Authentik with its own client ID a
 |---|---|---|---|
 | Grafana | `grafana` | `https://holdens-mac-mini.story-larch.ts.net:8444/login/generic_oauth` | Infisical: `GRAFANA_OAUTH_CLIENT_SECRET` |
 | ArgoCD | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443/auth/callback` | Terraform: `argocd_oidc_client_secret` |
-| Gitea | `gitea` | `https://holdens-mac-mini.story-larch.ts.net/user/oauth2/authentik/callback` | Infisical: `GITEA_OAUTH_CLIENT_SECRET` |
+| Gitea | `gitea` | `https://holdens-mac-mini.story-larch.ts.net:8446/user/oauth2/authentik/callback` | Infisical: `GITEA_OAUTH_CLIENT_SECRET` |
+
+All providers use **RS256** signing (asymmetric keys). Scope mappings assigned: `openid`, `email`, `profile`.
+
+## Authentication Model
+
+All services enforce SSO-only access — local login forms are disabled:
+
+| Service | How SSO is enforced |
+|---|---|
+| ArgoCD | `configs.cm.admin.enabled: false` — admin login disabled, RBAC default `role:admin` for all SSO users |
+| Grafana | `auth.disable_login_form: true`, `auto_login: true` — auto-redirects to Authentik |
+| Gitea | `ALLOW_ONLY_EXTERNAL_REGISTRATION: true` — new users can only register via OAuth |
+
+The Gitea local admin account is retained as a break-glass mechanism (credentials in Infisical).
 
 ## Configuration
 
@@ -53,7 +67,7 @@ Key settings:
 - **PostgreSQL:** Embedded subchart with 2Gi PVC
 - **Secrets:** All sensitive values (secret key, bootstrap password/token, PG password) come from Infisical via ExternalSecret
 - **NodePort:** 30500 (HTTP), 30501 (HTTPS)
-- **Tailscale Serve:** Port 8447
+- **Tailscale Serve:** Default HTTPS port (443)
 
 ### Secrets in Infisical
 
@@ -76,13 +90,14 @@ Key settings:
 
 1. Create an OAuth2 provider in Authentik (UI or API): set client ID, secret, and redirect URI
 2. Create an Authentik Application and link it to the provider
-3. Store the client secret in Infisical
-4. Add the secret key to the service's ExternalSecret
-5. Configure the service's OIDC settings to point to Authentik's endpoints:
-   - Authorize: `https://holdens-mac-mini.story-larch.ts.net:8447/application/o/authorize/`
-   - Token: `https://holdens-mac-mini.story-larch.ts.net:8447/application/o/token/`
-   - Userinfo: `https://holdens-mac-mini.story-larch.ts.net:8447/application/o/userinfo/`
-   - Discovery: `https://holdens-mac-mini.story-larch.ts.net:8447/application/o/<slug>/.well-known/openid-configuration`
+3. Assign scope mappings: `openid`, `email`, `profile`
+4. Store the client secret in Infisical
+5. Add the secret key to the service's ExternalSecret
+6. Configure the service's OIDC settings to point to Authentik's endpoints:
+   - Authorize: `https://holdens-mac-mini.story-larch.ts.net/application/o/authorize/`
+   - Token: `https://holdens-mac-mini.story-larch.ts.net/application/o/token/`
+   - Userinfo: `https://holdens-mac-mini.story-larch.ts.net/application/o/userinfo/`
+   - Discovery: `https://holdens-mac-mini.story-larch.ts.net/application/o/<slug>/.well-known/openid-configuration`
 
 ## Troubleshooting
 
@@ -93,3 +108,6 @@ Key settings:
 | "Invalid client" error | Wrong client_id or secret | Verify the secret in Infisical matches what's in Authentik |
 | OIDC login button not showing | Config not applied | For ArgoCD: run `terraform apply`; for Grafana: wait for ArgoCD sync |
 | Gitea shows no OAuth option | Init job didn't run | Check job: `kubectl get jobs -n gitea-system` |
+| 403 `insufficient_scope` on userinfo | Provider missing scope mappings | Assign `openid`, `email`, `profile` scope mappings to the provider in Authentik |
+| ArgoCD `malformed jwt: unexpected algorithm HS256` | Provider using HS256 instead of RS256 | Update the provider's signing key to an RS256 keypair in Authentik |
+| ArgoCD shows no applications after SSO login | RBAC policy.default is empty | Set `configs.rbac.policy.default: role:admin` in Terraform |

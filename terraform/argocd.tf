@@ -54,19 +54,6 @@ resource "helm_release" "argocd" {
     value = "jsonPointers:\n- /metadata/finalizers\n"
   }
 
-  # Set the ArgoCD admin password directly via Helm values so it is fully owned
-  # by this Helm release. Using an ExternalSecret with creationPolicy=Merge would
-  # cause ArgoCD to propagate its tracking annotation to argocd-secret, then try
-  # to prune it (since argocd-secret is not in git). Helm ownership avoids this.
-  #
-  # Generate the bcrypt hash with:
-  #   python3 -c "import bcrypt; print(bcrypt.hashpw(b'PASSWORD', bcrypt.gensalt(10)).decode())"
-  # Store the plaintext password in Infisical as ARGOCD_ADMIN_PASSWORD for reference.
-  set {
-    name  = "configs.secret.argocdServerAdminPassword"
-    value = var.argocd_admin_password_bcrypt
-  }
-
   # OIDC SSO via Authentik — client secret stored in argocd-secret.
   set {
     name  = "configs.cm.url"
@@ -76,7 +63,7 @@ resource "helm_release" "argocd" {
     name  = "configs.cm.oidc\\.config"
     value = yamlencode({
       name      = "Authentik"
-      issuer    = "https://holdens-mac-mini.story-larch.ts.net:8447/application/o/argocd/"
+      issuer    = "https://holdens-mac-mini.story-larch.ts.net/application/o/argocd/"
       clientID  = "argocd"
       clientSecret = "$oidc.argocd.clientSecret"
       requestedScopes = ["openid", "profile", "email"]
@@ -95,6 +82,12 @@ resource "helm_release" "argocd" {
   set {
     name  = "configs.cm.admin\\.enabled"
     value = "false"
+  }
+
+  # Grant all SSO-authenticated users admin access (single-user homelab).
+  set {
+    name  = "configs.rbac.policy\\.default"
+    value = "role:admin"
   }
 
   depends_on = [kubernetes_namespace.argocd]

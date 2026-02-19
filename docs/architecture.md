@@ -226,14 +226,14 @@ flowchart TD
 
 Services are exposed through **Tailscale Serve**, which provides automatic TLS certificates and makes services accessible from any device on the tailnet. OrbStack NodePorts only bind to `localhost`, and Tailscale Serve bridges the gap.
 
-| Service | NodePort | Tailscale URL | Tailscale Port |
-|---|---|---|---|
-| ArgoCD | `:30080` (HTTP) | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
-| Gitea | `:30300` | `https://holdens-mac-mini.story-larch.ts.net` | 443 |
-| Grafana | `:30090` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
-| Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
-| Authentik | `:30500` | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 |
-| OpenClaw | `:30789` | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 |
+| Service | NodePort | Tailscale URL | Tailscale Port | Auth |
+|---|---|---|---|---|
+| Authentik (SSO) | `:30500` | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) | SSO portal |
+| ArgoCD | `:30080` (HTTP) | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 | SSO via Authentik |
+| Grafana | `:30090` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 | SSO via Authentik |
+| Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 | Local admin |
+| Gitea | `:30300` | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 | SSO via Authentik |
+| OpenClaw | `:30789` | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 | Local |
 
 For the full networking reference, see [docs/networking.md](./networking.md).
 

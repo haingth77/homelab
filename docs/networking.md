@@ -7,7 +7,7 @@ This document explains how services running inside the OrbStack Kubernetes clust
 Three constraints shape the networking setup:
 
 1. **OrbStack NodePorts bind to localhost only.** Unlike cloud Kubernetes, OrbStack's single-node cluster exposes NodePort services on `127.0.0.1`, not on the host's LAN or Tailscale interfaces.
-2. **No Ingress controller is installed.** A full nginx/traefik deployment is unnecessary for a two-service homelab.
+2. **No Ingress controller is installed.** A full nginx/traefik deployment is unnecessary for a homelab.
 3. **The Mac mini is headless.** All access comes from other devices (iPhone, iPad, other machines) over Tailscale.
 
 ## Solution: NodePort + Tailscale Serve
@@ -26,18 +26,17 @@ flowchart TD
 
     subgraph mac["Mac mini M4 (holdens-mac-mini)"]
         subgraph ts["Tailscale Serve"]
-            TLS443["HTTPS :443\nauto Let's Encrypt cert"]
-            TLS8443["HTTPS :8443\nauto Let's Encrypt cert"]
-            TLS8444["HTTPS :8444\nauto Let's Encrypt cert"]
+            TLS443["HTTPS :443\nAuthentik (SSO portal)"]
+            TLS8443["HTTPS :8443\nArgoCD"]
+            TLS8444["HTTPS :8444\nGrafana"]
         end
 
         subgraph orbstack["OrbStack Kubernetes"]
+            subgraph authentikNs["authentik namespace"]
+                AuthentikSvc["authentik\nNodePort 30500"]
+            end
             subgraph argocdNs["argocd namespace"]
                 ArgoCDSvc["argocd-server\nNodePort 30080 (HTTP, insecure mode)"]
-            end
-            subgraph giteaNs["gitea-system namespace"]
-                GiteaSvc["gitea\nNodePort 30300/30022"]
-                PgSvc["postgresql\nClusterIP 5432"]
             end
             subgraph monNs["monitoring namespace"]
                 GrafanaSvc["grafana\nNodePort 30090"]
@@ -45,16 +44,17 @@ flowchart TD
             subgraph infisicalNs["infisical namespace"]
                 InfisicalSvc["infisical\nNodePort 30445"]
             end
-            subgraph authentikNs["authentik namespace"]
-                AuthentikSvc["authentik\nNodePort 30500"]
+            subgraph giteaNs["gitea-system namespace"]
+                GiteaSvc["gitea\nNodePort 30300/30022"]
+                PgSvc["postgresql\nClusterIP 5432"]
             end
         end
 
-        TLS443 -- "http://localhost:30300" --> GiteaSvc
+        TLS443 -- "http://localhost:30500" --> AuthentikSvc
         TLS8443 -- "http://localhost:30080" --> ArgoCDSvc
         TLS8444 -- "http://localhost:30090" --> GrafanaSvc
-        TLS8445["HTTPS :8445\nauto Let's Encrypt cert"] -- "http://localhost:30445" --> InfisicalSvc
-        TLS8447["HTTPS :8447\nauto Let's Encrypt cert"] -- "http://localhost:30500" --> AuthentikSvc
+        TLS8445["HTTPS :8445"] -- "http://localhost:30445" --> InfisicalSvc
+        TLS8446["HTTPS :8446"] -- "http://localhost:30300" --> GiteaSvc
     end
 
     iPhone -- "https://holdens-mac-mini\n.story-larch.ts.net" --> TLS443
@@ -74,15 +74,15 @@ sequenceDiagram
     participant WG as WireGuard Tunnel
     participant TServe as tailscale serve
     participant NodePort as OrbStack NodePort
-    participant Pod as Gitea Pod
+    participant Pod as Authentik Pod
 
     Browser->>MagicDNS: Resolve holdens-mac-mini.story-larch.ts.net
     MagicDNS-->>Browser: 100.77.144.4
     Browser->>WG: TLS ClientHello (SNI: holdens-mac-mini.story-larch.ts.net)
     WG->>TServe: Decrypted WireGuard packet to 100.77.144.4:443
     TServe->>TServe: TLS termination (Let's Encrypt cert)
-    TServe->>NodePort: HTTP GET / -> http://localhost:30300
-    NodePort->>Pod: Forward to gitea pod :3000
+    TServe->>NodePort: HTTP GET / -> http://localhost:30500
+    NodePort->>Pod: Forward to authentik-server pod :9000
     Pod-->>TServe: HTTP 200 (HTML)
     TServe-->>Browser: HTTPS 200 (re-encrypted)
 ```
@@ -92,50 +92,22 @@ sequenceDiagram
 | 1 | Browser | MagicDNS (100.100.100.100) | DNS | Resolves `*.story-larch.ts.net` to Tailscale IP |
 | 2 | Browser | Mac mini (100.77.144.4) | WireGuard | Encrypted tunnel between devices |
 | 3 | Tailscale interface | `tailscale serve` | TLS | TLS termination with LE cert |
-| 4 | `tailscale serve` | `localhost:30300` | HTTP | Reverse proxy to NodePort |
-| 5 | NodePort | Gitea Pod `:3000` | HTTP | Kubernetes Service routing |
+| 4 | `tailscale serve` | `localhost:30500` | HTTP | Reverse proxy to NodePort |
+| 5 | NodePort | Authentik Pod `:9000` | HTTP | Kubernetes Service routing |
 
 ## Layer 1: Kubernetes NodePort Services
-
-### Gitea (`k8s/apps/gitea/service.yaml`)
-
-```yaml
-spec:
-  type: NodePort
-  ports:
-    - port: 3000        # ClusterIP port (pod-to-pod)
-      targetPort: http   # Container port name
-      nodePort: 30300    # Exposed on localhost:30300
-      name: http
-    - port: 22
-      targetPort: ssh
-      nodePort: 30022    # Exposed on localhost:30022
-      name: ssh
-```
-
-### ArgoCD (Terraform Helm values in `terraform/argocd.tf`)
-
-ArgoCD is installed by Terraform via Helm. The NodePort and insecure mode are set via Helm values — there is no Kustomize patch for ArgoCD:
-
-```hcl
-set { name = "server.service.type";          value = "NodePort" }
-set { name = "server.service.nodePorts.http"; value = "30080"   }
-set { name = "server.service.nodePorts.https"; value = "30443"  }
-set { name = "configs.params.server\\.insecure"; value = "true" }
-```
-
-Running in `--insecure` mode means ArgoCD terminates TLS at the Tailscale Serve layer instead of internally. Tailscale provides a valid Let's Encrypt certificate; ArgoCD serves plain HTTP on `:30080`.
 
 ### Port Map
 
 | Service | Container Port | NodePort | localhost URL |
 |---------|---------------|----------|---------------|
-| Gitea HTTP | 3000 | 30300 | `http://localhost:30300` |
-| Gitea SSH | 22 | 30022 | `ssh://localhost:30022` |
+| Authentik | 9000 | 30500 | `http://localhost:30500` |
 | ArgoCD HTTP | 8080 | 30080 | `http://localhost:30080` |
 | Grafana | 3000 | 30090 | `http://localhost:30090` |
-| Authentik | 9000 | 30500 | `http://localhost:30500` |
 | Infisical | 8080 | 30445 | `http://localhost:30445` |
+| Gitea HTTP | 3000 | 30300 | `http://localhost:30300` |
+| Gitea SSH | 22 | 30022 | `ssh://localhost:30022` |
+| OpenClaw | 18789 | 30789 | `http://localhost:30789` |
 | PostgreSQL (Gitea) | 5432 | — | ClusterIP only (no external access) |
 
 ## Layer 2: Tailscale Serve
@@ -145,23 +117,26 @@ Running in `--insecure` mode means ArgoCD terminates TLS at the Tailscale Serve 
 ### Configuration Commands
 
 ```bash
-# Gitea -- default HTTPS port (443)
-tailscale serve --bg http://localhost:30300
+# Authentik (SSO portal) — default HTTPS port (443)
+tailscale serve --bg http://localhost:30500
 
-# ArgoCD -- custom HTTPS port (8443); ArgoCD runs in insecure mode so plain HTTP
+# ArgoCD — custom HTTPS port (8443); ArgoCD runs in insecure mode so plain HTTP
 tailscale serve --bg --https 8443 http://localhost:30080
 
-# Grafana -- custom HTTPS port (8444)
+# Grafana — custom HTTPS port (8444)
 tailscale serve --bg --https 8444 http://localhost:30090
 
-# Infisical -- custom HTTPS port (8445)
+# Infisical — custom HTTPS port (8445)
 tailscale serve --bg --https 8445 http://localhost:30445
 
-# Authentik -- custom HTTPS port (8447)
-tailscale serve --bg --https 8447 http://localhost:30500
+# Gitea — custom HTTPS port (8446)
+tailscale serve --bg --https 8446 http://localhost:30300
+
+# OpenClaw — custom HTTPS port (8447)
+tailscale serve --bg --https 8447 http://localhost:30789
 ```
 
-The `--bg` flag runs the proxy as a persistent background service that survives terminal sessions. The `https+insecure://` prefix tells Tailscale to connect to ArgoCD's self-signed HTTPS endpoint without verifying its certificate (since TLS is re-terminated by Tailscale with a valid cert).
+The `--bg` flag runs the proxy as a persistent background service that survives terminal sessions.
 
 ### How TLS Works
 
@@ -177,18 +152,18 @@ flowchart LR
     end
 
     subgraph k8s["Kubernetes"]
-        Gitea["Gitea :3000\nplain HTTP"]
-        ArgoCD["ArgoCD :8080\nself-signed HTTPS"]
-        Grafana["Grafana :3000\nplain HTTP"]
         Authentik["Authentik :9000\nplain HTTP"]
+        ArgoCD["ArgoCD :8080\nplain HTTP (insecure mode)"]
+        Grafana["Grafana :3000\nplain HTTP"]
+        Gitea["Gitea :3000\nplain HTTP"]
     end
 
     Browser -- "TLS 1.3\nvalid cert" --> Cert
     Cert --> Proxy
-    Proxy -- "plain HTTP" --> Gitea
-    Proxy -- "HTTPS\nskip cert verify" --> ArgoCD
-    Proxy -- "plain HTTP" --> Grafana
     Proxy -- "plain HTTP" --> Authentik
+    Proxy -- "plain HTTP" --> ArgoCD
+    Proxy -- "plain HTTP" --> Grafana
+    Proxy -- "plain HTTP" --> Gitea
 ```
 
 Tailscale automatically provisions and renews Let's Encrypt certificates for the `*.ts.net` domain. No manual certificate management, no cert-manager, no self-signed certs.
@@ -199,7 +174,7 @@ Tailscale automatically provisions and renews Let's Encrypt certificates for the
 $ tailscale serve status
 
 https://holdens-mac-mini.story-larch.ts.net (tailnet only)
-|-- / proxy http://localhost:30300
+|-- / proxy http://localhost:30500
 
 https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
 |-- / proxy http://localhost:30080
@@ -210,14 +185,17 @@ https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
 https://holdens-mac-mini.story-larch.ts.net:8445 (tailnet only)
 |-- / proxy http://localhost:30445
 
+https://holdens-mac-mini.story-larch.ts.net:8446 (tailnet only)
+|-- / proxy http://localhost:30300
+
 https://holdens-mac-mini.story-larch.ts.net:8447 (tailnet only)
-|-- / proxy http://localhost:30500
+|-- / proxy http://localhost:30789
 ```
 
 ### Manage Serve
 
 ```bash
-# Stop Gitea proxy
+# Stop Authentik proxy
 tailscale serve --https=443 off
 
 # Stop ArgoCD proxy
@@ -226,7 +204,10 @@ tailscale serve --https=8443 off
 # Stop Grafana proxy
 tailscale serve --https=8444 off
 
-# Stop Authentik proxy
+# Stop Gitea proxy
+tailscale serve --https=8446 off
+
+# Stop OpenClaw proxy
 tailscale serve --https=8447 off
 
 # Reset all serve config
@@ -247,13 +228,14 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 
 ### Access URLs
 
-| Service | URL | Port |
-|---------|-----|------|
-| Gitea | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) |
-| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 |
-| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
-| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
-| Authentik | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 |
+| Service | URL | Port | Auth |
+|---------|-----|------|------|
+| Authentik (SSO) | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) | SSO portal |
+| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 | SSO via Authentik |
+| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 | SSO via Authentik |
+| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 | Local admin |
+| Gitea | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 | SSO via Authentik |
+| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 | Local |
 
 ### Tailscale Serve vs Funnel
 
@@ -269,23 +251,11 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 | Approach | Pros | Cons |
 |----------|------|------|
 | **Tailscale Serve + NodePort** (current) | Zero config TLS, no extra pods, works on headless Mac, private by default | Requires Tailscale on all client devices |
-| nginx-ingress / Traefik | Standard K8s pattern, works with any client | Extra pods, manual TLS (cert-manager), DNS setup, overkill for 3 services |
+| nginx-ingress / Traefik | Standard K8s pattern, works with any client | Extra pods, manual TLS (cert-manager), DNS setup, overkill for homelab |
 | `kubectl port-forward` | No config needed | Manual, dies when terminal closes, no TLS, single user |
 | LoadBalancer (MetalLB) | Standard K8s pattern | Complex setup for single-node, still need TLS and DNS |
 
 For a single-node homelab with Tailscale already in use, NodePort + `tailscale serve` is the simplest path to secure, private, multi-device access.
-
-## Gitea ROOT_URL Integration
-
-Gitea uses `ROOT_URL` to generate all links in its web UI (clone URLs, redirect URLs, API links). This must match the external URL users access:
-
-```ini
-[server]
-ROOT_URL = https://holdens-mac-mini.story-larch.ts.net/
-SSH_DOMAIN = holdens-mac-mini.story-larch.ts.net
-```
-
-If `ROOT_URL` doesn't match the Tailscale hostname, clone URLs and OAuth redirects will point to the wrong address. This value is set in `k8s/apps/gitea/configmap.yaml`.
 
 ## Complete Network Topology
 
@@ -298,18 +268,15 @@ flowchart TD
 
     subgraph tailnet["Tailscale Tailnet (story-larch)"]
         subgraph mac["Mac mini M4\n100.77.144.4"]
-            TS["tailscale serve\n:443, :8443, :8444, :8445, :8446"]
+            TS["tailscale serve\n:443, :8443, :8444, :8445, :8446, :8447"]
 
             subgraph orb["OrbStack Kubernetes"]
+                subgraph authentik["authentik ns"]
+                    AuthentikSvc2["authentik-server\nNodePort 30500"]
+                end
                 subgraph argocd["argocd ns"]
                     ArgoSvc["argocd-server\nNodePort 30080 (HTTP)"]
                     ArgoCtrl["application-controller"]
-                end
-                subgraph gitea["gitea-system ns"]
-                    GiteaSvc["gitea\nNodePort 30300"]
-                    GiteaPod["Gitea :3000"]
-                    PgSvc["postgresql :5432"]
-                    PgPod["PostgreSQL"]
                 end
                 subgraph monNs2["monitoring ns"]
                     GrafanaSvc2["grafana\nNodePort 30090"]
@@ -317,15 +284,26 @@ flowchart TD
                 subgraph infisical_ns["infisical ns"]
                     InfisicalSvc2["infisical\nNodePort 30445"]
                 end
+                subgraph gitea["gitea-system ns"]
+                    GiteaSvc2["gitea\nNodePort 30300"]
+                    GiteaPod["Gitea :3000"]
+                    PgSvc2["postgresql :5432"]
+                    PgPod["PostgreSQL"]
+                end
+                subgraph openclaw_ns["openclaw ns"]
+                    OpenClawSvc["openclaw\nNodePort 30789"]
+                end
             end
 
-            TS -- "localhost:30300" --> GiteaSvc
+            TS -- "localhost:30500" --> AuthentikSvc2
             TS -- "localhost:30080" --> ArgoSvc
             TS -- "localhost:30090" --> GrafanaSvc2
             TS -- "localhost:30445" --> InfisicalSvc2
-            GiteaSvc --> GiteaPod
-            GiteaPod --> PgSvc
-            PgSvc --> PgPod
+            TS -- "localhost:30300" --> GiteaSvc2
+            TS -- "localhost:30789" --> OpenClawSvc
+            GiteaSvc2 --> GiteaPod
+            GiteaPod --> PgSvc2
+            PgSvc2 --> PgPod
             ArgoCtrl -- "poll" --> GitHub
             LetsEncrypt -. "auto cert" .-> TS
         end
@@ -343,7 +321,7 @@ flowchart TD
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `Could not resolve host: *.story-larch.ts.net` | MagicDNS not enabled or not propagated | Enable MagicDNS in Tailscale admin; or add `100.77.144.4 holdens-mac-mini.story-larch.ts.net` to `/etc/hosts` |
-| `connection refused` on :30300 | Gitea pod not running or Service not NodePort | `kubectl get svc,pods -n gitea-system` |
+| `connection refused` on NodePort | Pod not running or Service not NodePort | `kubectl get svc,pods -n <namespace>` |
 | `Serve is not enabled on your tailnet` | Tailscale Serve feature not activated | Visit the URL shown in the error to enable it |
 | TLS certificate error in browser | `tailscale serve` not running | `tailscale serve status`; restart with `--bg` commands |
 | ArgoCD returns 502 | ArgoCD pod restarting or not ready | `kubectl get pods -n argocd` |

@@ -37,12 +37,12 @@ flowchart TD
 
 ## Access
 
-| Interface | URL | Credentials |
+| Interface | URL | Auth |
 |---|---|---|
-| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | admin / admin |
-| Grafana (local) | `http://localhost:30090` | admin / admin |
+| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | SSO via Authentik (auto-redirects) |
+| Grafana (local) | `http://localhost:30090` | SSO via Authentik |
 
-Change the default admin password after first login via Grafana UI (Profile → Change password).
+Grafana is configured with SSO-only access — the local login form is disabled and users are auto-redirected to Authentik. The admin password in `grafana-secret` is retained for API and break-glass access.
 
 ## What's Included
 
@@ -111,8 +111,9 @@ kubectl get pvc -n monitoring
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Grafana login fails | Wrong credentials | Default is admin/admin; reset via `kubectl exec` into Grafana pod |
+| Grafana login fails | SSO misconfigured | Check Authentik OIDC provider has `openid`, `email`, `profile` scope mappings; verify `api_url` has no trailing slash |
 | No metrics in dashboards | Prometheus targets down | Check `kubectl get pods -n monitoring`; verify targets via port-forward |
 | High memory usage | Retention too long or too many metrics | Reduce `retention` or add `retentionSize` limit in Prometheus spec |
 | PVC pending | No storage provisioner | Verify `local-path` provisioner is running in `kube-system` |
 | Grafana unreachable via Tailscale | Serve not configured | `tailscale serve --bg --https 8444 http://localhost:30090` |
+| Grafana 404 on `/userinfo/emails` | Authentik provider missing scope mappings | Assign `openid`, `email`, `profile` scope mappings to the Grafana provider |

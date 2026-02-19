@@ -22,7 +22,7 @@ data:
     [server]
     HTTP_ADDR = 0.0.0.0
     HTTP_PORT = 3000
-    ROOT_URL = https://holdens-mac-mini.story-larch.ts.net/
+    ROOT_URL = https://holdens-mac-mini.story-larch.ts.net:8446/
     DISABLE_SSH = false
     START_SSH_SERVER = false
     SSH_DOMAIN = holdens-mac-mini.story-larch.ts.net

@@ -127,7 +127,7 @@ spec:
 
               # ── OAuth2 authentication source (Authentik SSO) ─────────────────
               OS=$(printf '%s' "${OAUTH_CLIENT_SECRET}" | base64 | tr -d '\n')
-              DISCOVER_URL="https://holdens-mac-mini.story-larch.ts.net:8447/application/o/gitea/.well-known/openid-configuration"
+              DISCOVER_URL="https://holdens-mac-mini.story-larch.ts.net/application/o/gitea/.well-known/openid-configuration"
 
               cat <<EOF | kubectl exec -i -n gitea-system "${GITEA_POD}" -- su git -s /bin/sh
               SECRET=\$(printf '%s' '${OS}' | base64 -d)

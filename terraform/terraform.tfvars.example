@@ -15,12 +15,6 @@ kube_context     = "orbstack"
 argocd_version   = "7.8.0"
 homelab_repo_url = "git@github.com:holdennguyen/homelab.git"
 
-# ArgoCD admin password (bcrypt hash). Store the plaintext in Infisical as
-# ARGOCD_ADMIN_PASSWORD for team reference. Managed here via Helm values to
-# avoid ESO annotation-propagation conflicts with argocd-secret.
-# Generate: python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt(10)).decode())"
-argocd_admin_password_bcrypt = "REPLACE_WITH_BCRYPT_HASH"
-
 # Generate: openssl rand -hex 16
 infisical_encryption_key = "REPLACE_WITH_32_CHAR_HEX"
 
@@ -36,3 +30,8 @@ infisical_redis_password = "REPLACE_WITH_REDIS_PASSWORD"
 # From Infisical UI: Settings → Machine Identities → Create → Universal Auth
 infisical_machine_identity_client_id     = "REPLACE_WITH_CLIENT_ID"
 infisical_machine_identity_client_secret = "REPLACE_WITH_CLIENT_SECRET"
+
+# ArgoCD OIDC client secret for Authentik SSO.
+# Create an OAuth2 provider in Authentik with client_id = "argocd",
+# then paste the generated client secret here.
+argocd_oidc_client_secret = "REPLACE_WITH_OIDC_SECRET"

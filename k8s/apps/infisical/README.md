@@ -108,9 +108,13 @@ flowchart TD
                     s6["GITEA_ADMIN_USERNAME"]
                     s7["GITEA_ADMIN_PASSWORD"]
                     s8["GITEA_ADMIN_EMAIL"]
-                    s9["ARGOCD_ADMIN_PASSWORD_BCRYPT"]
-                    s10["ARGOCD_ADMIN_PASSWORD"]
-                    s11["KUBERNETES_DASHBOARD_TOKEN"]
+                    s9["AUTHENTIK_SECRET_KEY"]
+                    s10["AUTHENTIK_BOOTSTRAP_PASSWORD"]
+                    s11["AUTHENTIK_BOOTSTRAP_TOKEN"]
+                    s12["AUTHENTIK_POSTGRES_PASSWORD"]
+                    s13["GRAFANA_ADMIN_PASSWORD"]
+                    s14["GRAFANA_OAUTH_CLIENT_SECRET"]
+                    s15["GITEA_OAUTH_CLIENT_SECRET"]
                 end
             end
         end
@@ -139,35 +143,19 @@ flowchart TD
 | `GITEA_ADMIN_USERNAME` | `gitea-admin-init` PostSync Job | Valid Gitea username | e.g. `holden` |
 | `GITEA_ADMIN_PASSWORD` | `gitea-admin-init` PostSync Job | Any string | `openssl rand -hex 12` |
 | `GITEA_ADMIN_EMAIL` | `gitea-admin-init` PostSync Job | Valid email | your email |
-| `ARGOCD_ADMIN_PASSWORD` | **Reference only** — not consumed by ESO | Plaintext ArgoCD admin password | your chosen password |
-| `ARGOCD_ADMIN_PASSWORD_BCRYPT` | **Reference only** — managed by Terraform Helm values, not ESO | bcrypt hash of the above | see below |
-| `KUBERNETES_DASHBOARD_TOKEN` | **Reference only** — K8s-generated SA token | Base64-decoded token string | see below |
+### SSO & Monitoring Credentials
 
-> **ArgoCD password is NOT managed by ESO.** Using an `ExternalSecret` with `creationPolicy: Merge` to write to `argocd-secret` caused ArgoCD to propagate its tracking annotation onto `argocd-secret` and then prune it (since it wasn't in git). Instead, the bcrypt hash is set via the `configs.secret.argocdServerAdminPassword` Helm value in `terraform/argocd.tf`. The Infisical entries are for team reference only.
+| Key | Used By | Value Constraints | How to Generate |
+|---|---|---|---|
+| `AUTHENTIK_SECRET_KEY` | Authentik ExternalSecret | Never change after first install | `openssl rand -hex 32` |
+| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Authentik ExternalSecret | Admin login password | Choose a strong password |
+| `AUTHENTIK_BOOTSTRAP_TOKEN` | Authentik ExternalSecret | API automation token | `openssl rand -hex 32` |
+| `AUTHENTIK_POSTGRES_PASSWORD` | Authentik ExternalSecret | Authentik internal PostgreSQL | `openssl rand -hex 12` |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana ExternalSecret | Break-glass admin access | `openssl rand -hex 12` |
+| `GRAFANA_OAUTH_CLIENT_SECRET` | Grafana ExternalSecret | OIDC client secret for Authentik | Generated when creating Authentik provider |
+| `GITEA_OAUTH_CLIENT_SECRET` | Gitea ExternalSecret | OIDC client secret for Authentik | Generated when creating Authentik provider |
 
-### Generating the ArgoCD bcrypt hash
-
-```bash
-# Python (available on any Mac)
-python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt(10)).decode())"
-# pip3 install bcrypt if needed
-
-# Or htpasswd (brew install httpd)
-htpasswd -bnBC 10 "" YOUR_PASSWORD | tr -d ':\n'
-```
-
-Store both values in Infisical, then put the hash in `terraform/terraform.tfvars` as `argocd_admin_password_bcrypt` and run `terraform apply`.
-
-### Retrieving the Kubernetes Dashboard token
-
-After ArgoCD syncs the `kubernetes-dashboard` Application (which creates the `admin-user-token` Secret), retrieve it:
-
-```bash
-kubectl get secret admin-user-token -n kubernetes-dashboard \
-  -o jsonpath='{.data.token}' | base64 -d
-```
-
-Paste the output into Infisical as `KUBERNETES_DASHBOARD_TOKEN`. This token is permanently valid (Kubernetes-managed long-lived SA token — it does not expire unless the Secret is deleted).
+> **ArgoCD OIDC client secret** is managed via Terraform (`argocd_oidc_client_secret` in tfvars), not by ESO. It is injected into `argocd-secret` via the `set_sensitive` Helm value in `terraform/argocd.tf`.
 
 ## First-Time Setup Walkthrough
 
@@ -202,7 +190,7 @@ The slug is hardcoded in `k8s/apps/external-secrets/cluster-secret-store.yaml`. 
 
 Navigate to `homelab` project → `prod` environment → click the **+** to add secrets. Add every key in the secrets inventory table above. Pay special attention to:
 - `GITEA_DB_PASSWORD` must equal `POSTGRES_PASSWORD` exactly
-- `ARGOCD_ADMIN_PASSWORD_BCRYPT` must be a valid bcrypt hash (starts with `$2a$10$`)
+- `AUTHENTIK_SECRET_KEY` must never be changed after first install
 
 ### Step 4 — Create Machine Identity
 
@@ -424,6 +412,6 @@ flowchart TD
 | `ClusterSecretStore` 401 | Machine identity credentials are wrong or placeholder values | Update `terraform.tfvars` and `terraform apply` |
 | `ClusterSecretStore` 403 | Machine identity not added to `homelab` project | Infisical UI → Project → Access Control → Machine Identities → Add Identity |
 | `ClusterSecretStore` 404 project not found | `projectSlug` doesn't match Infisical project | Infisical UI → Project Settings → confirm Slug field is exactly `homelab` |
-| UI shows "Invalid login" | Wrong admin password | Use the password stored in Infisical under `ARGOCD_ADMIN_PASSWORD` (not ArgoCD — Infisical itself doesn't use this key, it's the Infisical admin password you set in the signup form) |
+| UI shows "Invalid login" | Wrong admin password | Use the Infisical admin password you set during initial signup (not an application password) |
 | ESO can read secrets but wrong values | Secret updated in Infisical but ESO cache not refreshed | `kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite` |
 | Infisical UI inaccessible from Tailscale | `tailscale serve` not configured for :8445 | `tailscale serve --bg --https 8445 http://localhost:30445` |

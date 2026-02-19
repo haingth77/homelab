@@ -61,8 +61,8 @@ All variables are documented in `variables.tf`. The table below provides the com
 | `kube_context` | string | no | `"orbstack"` | kubeconfig context name |
 | `argocd_version` | string | no | `"7.8.0"` | ArgoCD Helm chart version |
 | `homelab_repo_url` | string | no | `"git@github.com:holdennguyen/homelab.git"` | SSH URL of the homelab git repo |
-| `argocd_admin_password_bcrypt` | string | **yes** | — | bcrypt hash of the ArgoCD admin password, injected via `configs.secret.argocdServerAdminPassword` Helm value. Store the plaintext in Infisical as `ARGOCD_ADMIN_PASSWORD` |
 | `argocd_repo_ssh_private_key` | string | **yes** | — | SSH private key for ArgoCD to clone the homelab repo |
+| `argocd_oidc_client_secret` | string | **yes** | — | OIDC client secret for ArgoCD's Authentik SSO provider |
 | `infisical_encryption_key` | string | **yes** | — | 32-char hex string; Infisical encrypts all stored secrets with this |
 | `infisical_auth_secret` | string | **yes** | — | Base64 string; Infisical JWT signing secret |
 | `infisical_postgres_password` | string | **yes** | — | Password for Infisical's internal PostgreSQL |
@@ -122,19 +122,14 @@ See [docs/bootstrap.md](../docs/bootstrap.md) for the complete step-by-step guid
    ```
 3. `terraform apply` — updates only the `infisical-machine-identity` K8s Secret
 
-### Rotate the ArgoCD Admin Password
+### Rotate the ArgoCD OIDC Client Secret
 
-1. Choose a new password and generate its bcrypt hash:
-   ```bash
-   python3 -c "import bcrypt; print(bcrypt.hashpw(b'NEW_PASSWORD', bcrypt.gensalt(10)).decode())"
-   # pip3 install bcrypt if needed
-   ```
+1. Generate a new client secret in Authentik (UI or API) for the `argocd` provider.
 2. Update `terraform/terraform.tfvars`:
    ```hcl
-   argocd_admin_password_bcrypt = "$2a$10$<new-hash>"
+   argocd_oidc_client_secret = "<new-secret>"
    ```
-3. Update Infisical: set `ARGOCD_ADMIN_PASSWORD` to the new plaintext and `ARGOCD_ADMIN_PASSWORD_BCRYPT` to the new hash.
-4. `terraform apply` — Helm updates `argocd-secret` with the new hash. ArgoCD picks it up immediately (no pod restart needed).
+3. `terraform apply` — Helm updates `argocd-secret` with the new OIDC secret. ArgoCD picks it up on the next login (no pod restart needed).
 
 ### Rotate the ArgoCD SSH Deploy Key
 

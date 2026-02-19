@@ -1,6 +1,6 @@
 # Gitea
 
-Self-hosted Git service running on Kubernetes, backed by PostgreSQL. Provides repository hosting, SSH access, and a web UI accessible at `https://holdens-mac-mini.story-larch.ts.net` via Tailscale.
+Self-hosted Git service running on Kubernetes, backed by PostgreSQL. Provides repository hosting, SSH access, and a web UI accessible at `https://holdens-mac-mini.story-larch.ts.net:8446` via Tailscale. Authentication is handled via **Authentik SSO** (OIDC).
 
 ## Architecture
 
@@ -26,8 +26,8 @@ flowchart TD
         GiteaContainer -- "env: GITEA__security__SECRET_KEY" --> GiteaSecret
     end
 
-    TServe["tailscale serve\n:443 -> localhost:30300"] -- "HTTPS" --> GiteaSvc
-    User["Browser"] -- "https://holdens-mac-mini\n.story-larch.ts.net" --> TServe
+    TServe["tailscale serve\n:8446 -> localhost:30300"] -- "HTTPS" --> GiteaSvc
+    User["Browser"] -- "https://holdens-mac-mini\n.story-larch.ts.net:8446" --> TServe
     GiteaContainer -- "postgresql:5432" --> PgSvc["PostgreSQL Service"]
 ```
 
@@ -141,7 +141,7 @@ The `app.ini` covers all non-sensitive configuration:
 | Key | Value | Notes |
 |-----|-------|-------|
 | `HTTP_PORT` | `3000` | Container listens here |
-| `ROOT_URL` | `https://holdens-mac-mini.story-larch.ts.net/` | Tailscale hostname for link generation |
+| `ROOT_URL` | `https://holdens-mac-mini.story-larch.ts.net:8446/` | Tailscale hostname for link generation |
 | `START_SSH_SERVER` | `false` | Disabled; the Docker image's OpenSSH handles port 22 |
 | `SSH_DOMAIN` | `holdens-mac-mini.story-larch.ts.net` | Used in SSH clone URLs |
 | `LFS_START_SERVER` | `true` | Git LFS support |
@@ -179,18 +179,18 @@ The `gitea` Service is `NodePort` with two ports:
 External access is provided via `tailscale serve` rather than a Kubernetes Ingress controller. This avoids the need for an ingress controller, certificate management, or DNS configuration.
 
 ```bash
-tailscale serve --bg http://localhost:30300
+tailscale serve --bg --https 8446 http://localhost:30300
 ```
 
 ```mermaid
 flowchart LR
-    Browser["Browser / Git Client"] -- "HTTPS :443" --> TServe["tailscale serve\nauto TLS cert"]
+    Browser["Browser / Git Client"] -- "HTTPS :8446" --> TServe["tailscale serve\nauto TLS cert"]
     TServe -- "HTTP" --> NodePort["localhost:30300"]
     NodePort --> GiteaSvc["gitea Service\n:3000"]
     GiteaSvc --> GiteaPod["Gitea Pod"]
 ```
 
-Access URL: `https://holdens-mac-mini.story-larch.ts.net`
+Access URL: `https://holdens-mac-mini.story-larch.ts.net:8446`
 
 The TLS certificate is automatically provisioned by Tailscale (Let's Encrypt) for the `*.ts.net` domain. No manual certificate management is needed.
 

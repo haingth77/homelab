@@ -106,11 +106,6 @@ infisical_auth_secret       = "<output of: openssl rand -base64 32>"
 infisical_postgres_password = "<output of: openssl rand -hex 12>"
 infisical_redis_password    = "<output of: openssl rand -hex 12>"
 
-# ArgoCD admin password — generate bcrypt hash from your chosen password:
-#   python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt(10)).decode())"
-# Store the plaintext in Infisical as ARGOCD_ADMIN_PASSWORD for team reference.
-argocd_admin_password_bcrypt = "<output of bcrypt hash command above>"
-
 # From Infisical UI after first run (see Step 6)
 # Leave placeholder values for the first apply and update after Infisical starts
 infisical_machine_identity_client_id     = "placeholder-update-after-infisical-starts"
@@ -122,6 +117,9 @@ argocd_repo_ssh_private_key = <<-EOT
 <paste full private key content here>
 -----END OPENSSH PRIVATE KEY-----
 EOT
+
+# ArgoCD OIDC client secret (create Authentik provider with client_id=argocd after bootstrap)
+argocd_oidc_client_secret = "<leave placeholder, set after Authentik is running>"
 ```
 
 > **Note on machine identity credentials:** On the first `terraform apply`, you can use placeholder values for `infisical_machine_identity_client_id` and `infisical_machine_identity_client_secret`. After Infisical is running and you have created a real Machine Identity (Step 6), re-run `terraform apply` with the real values.
@@ -162,7 +160,7 @@ Expected sequence:
 1. `infisical` app syncs first (sync-wave 0) → Infisical pods start
 2. `external-secrets` app syncs (sync-wave 0) → ESO operator installs CRDs
 3. `external-secrets-config` app syncs (sync-wave 1) → ClusterSecretStore is created
-4. `postgresql`, `gitea`, `kubernetes-dashboard` sync → pods start (secrets not yet available)
+4. `postgresql`, `gitea`, `monitoring`, `authentik` sync → pods start (secrets not yet available)
 
 ## Step 6: Configure Infisical
 
@@ -211,13 +209,17 @@ Navigate to the `homelab` project → `prod` environment → path `/` and add th
 | `GITEA_ADMIN_PASSWORD` | random password | `openssl rand -hex 12` |
 | `GITEA_ADMIN_EMAIL` | your email address | e.g. `you@example.com` |
 
-**Reference credentials (stored for team visibility, not consumed by ESO):**
+**Authentik SSO secrets (added after Authentik is deployed):**
 
 | Key | Value | How to generate |
 |---|---|---|
-| `ARGOCD_ADMIN_PASSWORD` | ArgoCD admin plaintext password | the password you chose for `argocd_admin_password_bcrypt` in `terraform.tfvars` |
-| `ARGOCD_ADMIN_PASSWORD_BCRYPT` | bcrypt hash of above | the exact hash you put in `terraform.tfvars` |
-| `KUBERNETES_DASHBOARD_TOKEN` | long-lived SA token | run after bootstrap: `kubectl get secret admin-user-token -n kubernetes-dashboard -o jsonpath='{.data.token}' \| base64 -d` |
+| `AUTHENTIK_SECRET_KEY` | Cookie signing key | `openssl rand -hex 32` (never change after first install) |
+| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial admin password | Choose a strong password |
+| `AUTHENTIK_BOOTSTRAP_TOKEN` | API token for automation | `openssl rand -hex 32` |
+| `AUTHENTIK_POSTGRES_PASSWORD` | Authentik PostgreSQL password | `openssl rand -hex 12` |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `openssl rand -hex 12` |
+| `GRAFANA_OAUTH_CLIENT_SECRET` | Grafana OIDC client secret | Generated when creating Authentik provider |
+| `GITEA_OAUTH_CLIENT_SECRET` | Gitea OIDC client secret | Generated when creating Authentik provider |
 
 ### 6e: Create a Machine Identity for ESO
 
@@ -264,17 +266,23 @@ kubectl annotate externalsecret gitea-secret -n gitea-system force-sync=$(date +
 These commands expose services to all devices on your tailnet with automatic TLS:
 
 ```bash
-# Gitea — default HTTPS (port 443)
-tailscale serve --bg http://localhost:30300
+# Authentik (SSO portal) — default HTTPS port (443)
+tailscale serve --bg http://localhost:30500
 
 # ArgoCD — custom HTTPS port 8443
 tailscale serve --bg --https 8443 http://localhost:30080
 
-# Kubernetes Dashboard — custom HTTPS port 8444
-tailscale serve --bg --https 8444 https+insecure://localhost:30444
+# Grafana — custom HTTPS port 8444
+tailscale serve --bg --https 8444 http://localhost:30090
 
 # Infisical — custom HTTPS port 8445
 tailscale serve --bg --https 8445 http://localhost:30445
+
+# Gitea — custom HTTPS port 8446
+tailscale serve --bg --https 8446 http://localhost:30300
+
+# OpenClaw — custom HTTPS port 8447
+tailscale serve --bg --https 8447 http://localhost:30789
 ```
 
 Verify:
@@ -287,16 +295,22 @@ Expected output:
 
 ```
 https://holdens-mac-mini.story-larch.ts.net (tailnet only)
-|-- / proxy http://localhost:30300
+|-- / proxy http://localhost:30500
 
 https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
 |-- / proxy http://localhost:30080
 
 https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
-|-- / proxy https+insecure://localhost:30444
+|-- / proxy http://localhost:30090
 
 https://holdens-mac-mini.story-larch.ts.net:8445 (tailnet only)
 |-- / proxy http://localhost:30445
+
+https://holdens-mac-mini.story-larch.ts.net:8446 (tailnet only)
+|-- / proxy http://localhost:30300
+
+https://holdens-mac-mini.story-larch.ts.net:8447 (tailnet only)
+|-- / proxy http://localhost:30789
 ```
 
 ## Step 8: Verify Everything is Healthy
@@ -313,24 +327,18 @@ kubectl get pods -A | grep -v Running | grep -v Completed
 kubectl get clustersecretstores
 kubectl get externalsecrets -A
 
-# ArgoCD admin password — from Infisical (ARGOCD_ADMIN_PASSWORD) or auto-generated:
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d; echo
-
-# Kubernetes Dashboard long-lived token
-kubectl get secret admin-user-token -n kubernetes-dashboard \
-  -o jsonpath='{.data.token}' | base64 -d; echo
-# Paste this value into Infisical as KUBERNETES_DASHBOARD_TOKEN
 ```
 
 Access URLs after bootstrap:
 
-| Service | URL |
-|---|---|
-| Gitea | `https://holdens-mac-mini.story-larch.ts.net` |
-| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` |
-| K8s Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8444` |
-| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` |
+| Service | URL | Auth |
+|---|---|---|
+| Authentik (SSO) | `https://holdens-mac-mini.story-larch.ts.net` | akadmin / bootstrap password |
+| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | SSO via Authentik |
+| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | SSO via Authentik |
+| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | Local admin |
+| Gitea | `https://holdens-mac-mini.story-larch.ts.net:8446` | SSO via Authentik |
+| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8447` | Local |
 
 ## Re-bootstrap from Scratch
 
