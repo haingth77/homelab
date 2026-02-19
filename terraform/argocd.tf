@@ -67,6 +67,26 @@ resource "helm_release" "argocd" {
     value = var.argocd_admin_password_bcrypt
   }
 
+  # OIDC SSO via Authentik — client secret stored in argocd-secret.
+  set {
+    name  = "configs.cm.url"
+    value = "https://holdens-mac-mini.story-larch.ts.net:8443"
+  }
+  set {
+    name  = "configs.cm.oidc\\.config"
+    value = yamlencode({
+      name      = "Authentik"
+      issuer    = "https://holdens-mac-mini.story-larch.ts.net:8447/application/o/argocd/"
+      clientID  = "argocd"
+      clientSecret = "$oidc.argocd.clientSecret"
+      requestedScopes = ["openid", "profile", "email"]
+    })
+  }
+  set_sensitive {
+    name  = "configs.secret.extra.oidc\\.argocd\\.clientSecret"
+    value = var.argocd_oidc_client_secret
+  }
+
   depends_on = [kubernetes_namespace.argocd]
 }
 

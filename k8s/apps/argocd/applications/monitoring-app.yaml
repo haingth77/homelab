@@ -33,6 +33,29 @@ spec:
             runAsUser: 472
             runAsGroup: 472
             fsGroup: 472
+          envFromSecrets:
+            - name: grafana-secret
+              optional: false
+          grafana.ini:
+            server:
+              root_url: https://holdens-mac-mini.story-larch.ts.net:8444
+            auth.generic_oauth:
+              enabled: true
+              name: Authentik
+              allow_sign_up: true
+              client_id: $__file{/etc/secrets/oauth-client-id}
+              client_secret: $__file{/etc/secrets/oauth-client-secret}
+              scopes: openid email profile
+              auth_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/authorize/
+              token_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/token/
+              api_url: https://holdens-mac-mini.story-larch.ts.net:8447/application/o/userinfo/
+              role_attribute_path: contains(groups[*], 'authentik Admins') && 'Admin' || 'Viewer'
+              auto_login: false
+          extraSecretMounts:
+            - name: oauth-secret
+              secretName: grafana-secret
+              mountPath: /etc/secrets
+              readOnly: true
           defaultDashboardsEnabled: true
           sidecar:
             dashboards:

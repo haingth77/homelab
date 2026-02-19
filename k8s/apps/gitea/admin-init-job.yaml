@@ -68,6 +68,11 @@ spec:
                 secretKeyRef:
                   name: gitea-admin-secret
                   key: GITEA_ADMIN_EMAIL
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-secret
+                  key: GITEA_OAUTH_CLIENT_SECRET
           command:
             - sh
             - -c
@@ -118,4 +123,31 @@ spec:
               # user was created via the web UI or a prior job run without this step.
               gitea admin user must-change-password --all --unset
               echo "must-change-password cleared."
+              EOF
+
+              # ── OAuth2 authentication source (Authentik SSO) ─────────────────
+              OS=$(printf '%s' "${OAUTH_CLIENT_SECRET}" | base64 | tr -d '\n')
+              DISCOVER_URL="https://holdens-mac-mini.story-larch.ts.net:8447/application/o/gitea/.well-known/openid-configuration"
+
+              cat <<EOF | kubectl exec -i -n gitea-system "${GITEA_POD}" -- su git -s /bin/sh
+              SECRET=\$(printf '%s' '${OS}' | base64 -d)
+              if gitea admin auth list 2>/dev/null | grep -q "authentik"; then
+                echo "OAuth source 'authentik' already exists — updating."
+                AUTH_ID=\$(gitea admin auth list 2>/dev/null | grep "authentik" | awk '{print \$1}')
+                gitea admin auth update-oauth --id "\$AUTH_ID" \
+                  --name "authentik" \
+                  --provider "openidConnect" \
+                  --key "gitea" \
+                  --secret "\$SECRET" \
+                  --auto-discover-url "${DISCOVER_URL}"
+              else
+                echo "Adding OAuth source 'authentik'."
+                gitea admin auth add-oauth \
+                  --name "authentik" \
+                  --provider "openidConnect" \
+                  --key "gitea" \
+                  --secret "\$SECRET" \
+                  --auto-discover-url "${DISCOVER_URL}"
+              fi
+              echo "OAuth2 source configured."
               EOF

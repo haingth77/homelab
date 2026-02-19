@@ -10,6 +10,12 @@ variable "argocd_repo_ssh_private_key" {
   sensitive   = true
 }
 
+variable "argocd_oidc_client_secret" {
+  description = "OIDC client secret for ArgoCD's Authentik provider"
+  type        = string
+  sensitive   = true
+}
+
 variable "kube_context" {
   description = "kubeconfig context to use (e.g. orbstack for OrbStack)"
   type        = string
