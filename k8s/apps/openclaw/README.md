@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph infisical["Infisical (homelab / prod)"]
-        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY\nGITHUB_TOKEN"]
     end
 
     subgraph providers["AI Model Providers"]
@@ -54,7 +54,7 @@ flowchart TD
 |------|---------|
 | `namespace.yaml` | Dedicated `openclaw` namespace |
 | `pvc.yaml` | 5Gi PVC for state data and agent workspaces |
-| `external-secret.yaml` | Syncs gateway token and API keys from Infisical → `openclaw-secret` |
+| `external-secret.yaml` | Syncs gateway token, API keys, and GitHub token from Infisical → `openclaw-secret` |
 | `configmap.yaml` | Multi-agent `openclaw.json` config (agents, skills, routing) |
 | `deployment.yaml` | Single-replica deployment with config/skills/workspace volumes |
 | `service.yaml` | NodePort service exposing port 30789 |
@@ -65,7 +65,7 @@ Related files outside this directory:
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile.openclaw` (repo root) | Homelab overlay — adds kubectl, helm, terraform, argocd, jq |
+| `Dockerfile.openclaw` (repo root) | Homelab overlay — adds kubectl, helm, terraform, argocd, jq, git, gh |
 | `k8s/apps/argocd/applications/openclaw-app.yaml` | ArgoCD Application CR |
 | `scripts/build-openclaw.sh` | Docker image build helper |
 | `skills/` (repo root) | Homelab-specific skills (mounted into pod via hostPath) |
@@ -102,6 +102,41 @@ flowchart LR
     RootApp --> appsProj
 ```
 
+## Agent Git Workflow
+
+All agents enforce a mandatory git workflow for any change to the homelab repository. No agent pushes directly to `main`.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant HA as homelab-admin<br/>(Orchestrator)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst)
+    participant GH as GitHub
+    participant Argo as ArgoCD
+
+    User->>HA: "Add resource X to service Y"
+    HA->>HA: Analyze request, pick agent
+    HA->>SA: sessions_spawn with task context
+
+    SA->>SA: Clone repo into workspace
+    SA->>GH: gh issue create
+    GH-->>SA: Issue #42
+    SA->>SA: git checkout -b feat/42-add-resource-x
+    SA->>SA: Edit manifests + docs
+    SA->>SA: git commit -m "feat: add resource X (#42)"
+    SA->>GH: git push + gh pr create
+    GH-->>SA: PR URL
+
+    SA-->>HA: Report PR URL
+    HA-->>User: "PR created: <url><br/>After merge, ArgoCD syncs in ~3min"
+
+    User->>GH: Review & merge PR
+    GH->>Argo: Push to main triggers sync
+    Argo->>Argo: Auto-sync within ~3 minutes
+```
+
+The git workflow details are embedded in each agent's `AGENTS.md` personality and the `gitops` skill. Git identity is set via environment variables (`GIT_AUTHOR_NAME=openclaw-bot`). The `GITHUB_TOKEN` from Infisical powers `gh` CLI authentication.
+
 ## Deployment
 
 ### Prerequisites
@@ -126,6 +161,8 @@ This builds the image as `openclaw:latest` with the following tools baked in:
 | `terraform` | 1.5.7 | Bootstrap layer management |
 | `argocd` | 2.14.11 | ArgoCD CLI |
 | `jq` | 1.6 | JSON processing |
+| `git` | (apt) | Git operations for the mandatory git workflow |
+| `gh` | (apt) | GitHub CLI for issues, PRs, and repo cloning |
 
 To use a custom tag:
 
@@ -145,6 +182,7 @@ Add the following secrets to Infisical under **homelab / prod**:
 |---|---|---|
 | `OPENCLAW_GATEWAY_TOKEN` | `openssl rand -hex 32` | Yes |
 | `GEMINI_API_KEY` | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | At least one provider |
+| `GITHUB_TOKEN` | GitHub PAT (Fine-grained) with repo scope for `holdennguyen/homelab` | Yes (for git workflow) |
 
 After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
 

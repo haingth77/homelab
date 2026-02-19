@@ -76,7 +76,7 @@ autoAttach:
 
 ## OpenClaw Agents
 
-OpenClaw runs four agents in an orchestrator pattern. The `homelab-admin` agent receives user requests and delegates to specialized sub-agents via `sessions_spawn`.
+OpenClaw runs four agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
 
 | Agent | Role | Model | Workspace |
 |---|---|---|---|
@@ -85,6 +85,81 @@ OpenClaw runs four agents in an orchestrator pattern. The `homelab-admin` agent 
 | `software-engineer` | Code development, review, testing | `google/gemini-2.5-pro` | `/data/workspaces/software-engineer` |
 | `security-analyst` | Security audits, hardening | `google/gemini-2.5-pro` | `/data/workspaces/security-analyst` |
 
+### How the Orchestrator Works
+
+Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the sole agent with `"default": true` in the config. The other three agents are sub-agents — they don't appear in the UI dropdown and can only be spawned by the orchestrator.
+
+**Delegation rules:**
+
+| Request type | Delegated to | Example |
+|---|---|---|
+| Infrastructure changes, Terraform, K8s ops, monitoring | `devops-sre` | "Add a NodePort to the monitoring stack" |
+| Code changes, feature development, code review, testing | `software-engineer` | "Update the Dockerfile to add a new tool" |
+| Security audits, vulnerability assessment, hardening | `security-analyst` | "Audit the RBAC configuration" |
+| Read-only checks, status queries, simple answers | `homelab-admin` (handles directly) | "What pods are running?" |
+
+When delegating, `homelab-admin` uses `sessions_spawn` and provides:
+1. Clear task description and expected outcome
+2. Relevant file paths or service names
+3. Any context from prior conversation
+
+The spawned sub-agent session appears in the UI sidebar. Sub-agents report results back via `sessions_announce`.
+
+### Mandatory Git Workflow
+
+ALL agents enforce a mandatory git workflow for any change to the homelab repository. No agent — including the orchestrator — pushes directly to `main`.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant HA as homelab-admin<br/>(Orchestrator)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst)
+    participant GH as GitHub
+    participant Argo as ArgoCD
+
+    User->>HA: "Add resource X to service Y"
+    HA->>HA: Analyze request, pick agent
+    HA->>SA: sessions_spawn with task context
+
+    SA->>SA: Clone repo into workspace
+    SA->>GH: gh issue create
+    GH-->>SA: Issue #42
+    SA->>SA: git checkout -b feat/42-add-resource-x
+    SA->>SA: Edit manifests + docs
+    SA->>SA: git commit -m "feat: add resource X (#42)"
+    SA->>GH: git push + gh pr create
+    GH-->>SA: PR URL
+
+    SA-->>HA: Report PR URL
+    HA-->>User: "PR created: <url><br/>After merge, ArgoCD syncs in ~3min"
+
+    User->>GH: Review & merge PR
+    GH->>Argo: Push to main triggers sync
+    Argo->>Argo: Auto-sync within ~3 minutes
+```
+
+**Step-by-step process (every agent follows this):**
+
+1. **Clone the repo** into the agent's workspace (`/data/workspaces/<agent-id>/homelab`)
+2. **Create a GitHub issue** via `gh issue create` describing the change
+3. **Create a branch** from main: `<type>/<issue-number>-<short-description>` (prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`)
+4. **Make changes** to manifests, config, docs
+5. **Commit** with a message referencing the issue: `<type>: <description> (#<issue-number>)`
+6. **Push** and **create a PR** via `gh pr create`
+7. **Report** the PR URL back to the orchestrator or user
+
+**After the PR is merged:**
+
+- **Layer 1 changes** (k8s manifests): ArgoCD auto-syncs within ~3 minutes
+- **Layer 0 changes** (Terraform): Requires manual `terraform apply` on the host
+- **Docker image changes**: Requires `./scripts/build-openclaw.sh` + pod restart on the host
+
+**What enables this:**
+
+- `git` and `gh` CLI are baked into the container image (`Dockerfile.openclaw`)
+- `GITHUB_TOKEN` from Infisical provides authentication for `gh` CLI
+- Git identity is set via environment variables: `GIT_AUTHOR_NAME=openclaw-bot`, `GIT_COMMITTER_EMAIL=openclaw-bot@homelab.local`
+
 ### Agent Configuration
 
 Agent config lives in two places:
@@ -92,7 +167,7 @@ Agent config lives in two places:
 - **Identity:** `k8s/apps/openclaw/configmap.yaml` → `openclaw.json` → `agents.list` (id, name, model, workspace, skills allowlist)
 - **Personality:** `agents/workspaces/<id>/AGENTS.md` (single source of truth, copied into pod on every restart)
 
-The container image (`Dockerfile.openclaw`) includes ops tools (kubectl, helm, terraform, argocd, jq) and the pod runs with a `cluster-admin` ServiceAccount, so agents can execute cluster operations directly.
+The container image (`Dockerfile.openclaw`) includes ops tools (kubectl, helm, terraform, argocd, jq, git, gh) and the pod runs with a `cluster-admin` ServiceAccount, so agents can execute cluster operations directly.
 
 ### Per-Agent Skill Assignment
 
@@ -110,7 +185,7 @@ Cross-cutting skills (e.g. `secret-management`) are shared across agents that ne
 ### Adding a New Agent
 
 1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
-2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
+2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality (must include the mandatory git workflow section)
 3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
 4. Add the agent ID to `tools.agentToAgent.allow` in the configmap
 5. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
@@ -139,7 +214,7 @@ Skills provide domain-specific knowledge and commands to agents. They live in `s
 | `devops-sre` | Infrastructure debugging, Terraform, incident response |
 | `software-engineer` | Code development, review, testing conventions |
 | `security-analyst` | Security audits, RBAC review, vulnerability assessment |
-| `gitops` | ArgoCD App of Apps pattern, sync management |
+| `gitops` | ArgoCD App of Apps pattern, sync management, mandatory git workflow reference |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
 
 ### Skill Format

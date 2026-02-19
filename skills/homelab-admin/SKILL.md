@@ -24,7 +24,7 @@ Orchestrate and manage the homelab Kubernetes cluster running on OrbStack (Mac m
 - **Networking:** NodePort (localhost only) + Tailscale Serve (auto TLS via Let's Encrypt)
 - **Manifests:** Kustomize for app workloads; Helm only for upstream charts (ESO, Infisical)
 - **Storage:** `local-path` provisioner (OrbStack default)
-- **Container image:** OpenClaw runs a custom image (`openclaw:latest`) built with `Dockerfile.openclaw`, which includes kubectl, helm, terraform, argocd, jq
+- **Container image:** OpenClaw runs a custom image (`openclaw:latest`) built with `Dockerfile.openclaw`, which includes kubectl, helm, terraform, argocd, jq, git, gh
 - **Pod RBAC:** This pod runs with a `cluster-admin` ServiceAccount — you have full cluster access
 
 ## Tailscale network
@@ -101,7 +101,7 @@ The Mac mini's Tailscale hostname is `holdens-mac-mini` on the tailnet `story-la
 | `postgresql-secret` | `gitea-system` | POSTGRES_PASSWORD, POSTGRES_USER, POSTGRES_DB, GITEA_DB_PASSWORD | SecretSynced |
 | `gitea-secret` | `gitea-system` | GITEA_SECRET_KEY | SecretSynced |
 | `gitea-admin-secret` | `gitea-system` | GITEA_ADMIN_USERNAME, GITEA_ADMIN_PASSWORD, GITEA_ADMIN_EMAIL | SecretSynced |
-| `openclaw-secret` | `openclaw` | OPENCLAW_GATEWAY_TOKEN, GEMINI_API_KEY | SecretSynced |
+| `openclaw-secret` | `openclaw` | OPENCLAW_GATEWAY_TOKEN, GEMINI_API_KEY, GITHUB_TOKEN | SecretSynced |
 
 All secrets are stored in Infisical under `homelab / prod` and synced via the `infisical` ClusterSecretStore using Universal Auth.
 

@@ -257,7 +257,7 @@ homelab/
 ├── .github/workflows/docs.yml     # GitHub Pages deploy on push to main
 ├── README.md                       # Quick-start and service table
 ├── mkdocs.yml                      # MkDocs Material site config
-├── Dockerfile.openclaw             # Homelab overlay for OpenClaw image (kubectl, helm, etc.)
+├── Dockerfile.openclaw             # Homelab overlay for OpenClaw image (kubectl, helm, git, gh, etc.)
 ├── terraform/                      # Layer 0 — bootstrap (run once)
 │   ├── README.md                   # Terraform variables and day-2 ops reference
 │   ├── providers.tf                # kubernetes + helm + local + null providers
