@@ -36,6 +36,7 @@ spec:
           service:
             type: NodePort
             nodePortHttp: 30500
+            nodePortHttps: 30501
 
         worker:
           replicas: 1
