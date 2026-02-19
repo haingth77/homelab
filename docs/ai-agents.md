@@ -27,10 +27,20 @@ flowchart TD
         DS["devops-sre"]
         SE["software-engineer"]
         SA["security-analyst"]
+        QA["qa-tester"]
         HA -->|"sessions_spawn"| DS
         HA -->|"sessions_spawn"| SE
         HA -->|"sessions_spawn"| SA
+        HA -->|"sessions_spawn"| QA
     end
+
+    subgraph models ["Model Providers"]
+        Gemini["google/gemini-2.5-pro\n(primary)"]
+        Ollama["ollama/qwen2.5-coder:7b\n(fallback)"]
+    end
+
+    openclaw --> Gemini
+    Gemini -.->|"429 rate limit"| Ollama
 
     Skills -->|"hostPath /skills"| openclaw
     AgentsMD -->|"hostPath → init container"| openclaw
@@ -76,14 +86,24 @@ autoAttach:
 
 ## OpenClaw Agents
 
-OpenClaw runs four agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
+OpenClaw runs five agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
 
-| Agent | Role | Model | Workspace |
-|---|---|---|---|
-| `homelab-admin` | Default orchestrator | `google/gemini-2.5-pro` | `/data/workspaces/homelab-admin` |
-| `devops-sre` | Infrastructure, K8s, Terraform | `google/gemini-2.5-pro` | `/data/workspaces/devops-sre` |
-| `software-engineer` | Code development, review, testing | `google/gemini-2.5-pro` | `/data/workspaces/software-engineer` |
-| `security-analyst` | Security audits, hardening | `google/gemini-2.5-pro` | `/data/workspaces/security-analyst` |
+| Agent | Role | Workspace |
+|---|---|---|
+| `homelab-admin` | Default orchestrator | `/data/workspaces/homelab-admin` |
+| `devops-sre` | Infrastructure, K8s, Terraform | `/data/workspaces/devops-sre` |
+| `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
+| `security-analyst` | Security audits, hardening | `/data/workspaces/security-analyst` |
+| `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
+
+All agents inherit their model from `agents.defaults.model` (no per-agent override):
+
+| Setting | Value |
+|---|---|
+| Primary | `google/gemini-2.5-pro` |
+| Fallback | `ollama/qwen2.5-coder:7b` (local, zero cost) |
+
+Ollama runs on the Mac mini host and is reachable from the pod at `http://host.internal:11434/v1`. When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local model.
 
 ### How the Orchestrator Works
 
@@ -96,6 +116,7 @@ Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the s
 | Infrastructure changes, Terraform, K8s ops, monitoring | `devops-sre` | "Add a NodePort to the monitoring stack" |
 | Code changes, feature development, code review, testing | `software-engineer` | "Update the Dockerfile to add a new tool" |
 | Security audits, vulnerability assessment, hardening | `security-analyst` | "Audit the RBAC configuration" |
+| Deployment validation, regression testing, health checks | `qa-tester` | "Verify all services are healthy after the merge" |
 | Read-only checks, status queries, simple answers | `homelab-admin` (handles directly) | "What pods are running?" |
 
 When delegating, `homelab-admin` uses `sessions_spawn` and provides:
@@ -114,7 +135,7 @@ ALL agents enforce a mandatory git workflow for any change to the homelab reposi
 sequenceDiagram
     participant User
     participant HA as homelab-admin<br/>(Orchestrator)
-    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer /<br/>security-analyst / qa-tester)
     participant GH as GitHub
     participant Argo as ArgoCD
 
@@ -155,7 +176,7 @@ Every issue and PR created by agents MUST be labeled. Labels serve as the tracki
 
 | Category | Labels | Rule |
 |---|---|---|
-| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst` | Exactly one — who is working on this |
+| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst`, `agent:qa-tester` | Exactly one — who is working on this |
 | **Type** | `type:feat`, `type:fix`, `type:chore`, `type:docs`, `type:refactor`, `type:security` | Exactly one — what kind of change |
 | **Area** | `area:k8s`, `area:terraform`, `area:argocd`, `area:secrets`, `area:monitoring`, `area:networking`, `area:openclaw`, `area:auth`, `area:gitea` | One or more — what part of the homelab |
 | **Priority** | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | Exactly one — urgency |
@@ -218,6 +239,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `devops-sre` | `devops-sre`, `gitops`, `secret-management` |
 | `software-engineer` | `software-engineer` |
 | `security-analyst` | `security-analyst`, `secret-management` |
+| `qa-tester` | `qa-tester`, `gitops` |
 
 Cross-cutting skills (e.g. `secret-management`) are shared across agents that need them.
 
@@ -250,10 +272,11 @@ Skills provide domain-specific knowledge and commands to agents. They live in `s
 
 | Skill | Description |
 |---|---|
-| `homelab-admin` | Cluster operations, service management, GitOps workflow |
-| `devops-sre` | Infrastructure debugging, Terraform, incident response |
-| `software-engineer` | Code development, review, testing conventions |
-| `security-analyst` | Security audits, RBAC review, vulnerability assessment |
+| `homelab-admin` | Cluster operations, service management, GitOps workflow, delegation framework |
+| `devops-sre` | Infrastructure debugging, Terraform, incident response, SLOs, deployment strategies |
+| `software-engineer` | Code development, review, testing, K8s manifest conventions, dependency management |
+| `security-analyst` | Security audits, RBAC review, vulnerability assessment, STRIDE threat modeling, CIS hardening |
+| `qa-tester` | Deployment validation, service health testing, regression checks, per-service acceptance criteria |
 | `gitops` | ArgoCD App of Apps pattern, sync management, mandatory git workflow reference |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
 

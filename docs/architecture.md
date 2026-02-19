@@ -216,6 +216,10 @@ flowchart TD
         OpenClawPod["OpenClaw Gateway\nNodePort :30789"]
     end
 
+    subgraph hostServices["Mac mini host"]
+        OllamaHost["Ollama\nqwen2.5-coder:7b\nhttp://host.internal:11434"]
+    end
+
     AuthentikPod -. "OIDC" .-> GrafanaPod
     AuthentikPod -. "OIDC" .-> ArgoServer
     AuthentikPod -. "OIDC" .-> GiteaPod
@@ -225,6 +229,8 @@ flowchart TD
     CSS -- "ExternalSecret" --> GiteaPod
     CSS -- "ExternalSecret" --> PGPod
     CSS -- "ExternalSecret" --> OpenClawPod
+    OpenClawPod -- "primary: Gemini API" --> GeminiAPI["Google Gemini API"]
+    OpenClawPod -. "fallback on 429" .-> OllamaHost
     ArgoController -- "poll git" --> GitHub["GitHub\nholdennguyen/homelab"]
 ```
 
@@ -253,6 +259,7 @@ For the full networking reference, see [docs/networking.md](./networking.md).
 | **Infisical** | Secret store | Self-hosted; UI for secret management; supports ESO Universal Auth; project/environment scoping |
 | **External Secrets Operator** | Secret sync | Bridges Infisical to Kubernetes Secrets; polling refresh; decoupled from app manifests |
 | **Tailscale** | Private networking | Zero-config WireGuard VPN; MagicDNS; auto TLS via `tailscale serve`; works across all devices |
+| **Ollama** | Local LLM runtime | Hosts fallback model on Mac mini; zero-cost inference; automatic failover from Gemini on 429 |
 | **Kustomize** | Manifest rendering | Native in `kubectl apply -k` and ArgoCD; overlays without templating language |
 
 ## Repository Layout
