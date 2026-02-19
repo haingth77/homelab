@@ -18,9 +18,9 @@ spec:
     targetRevision: 2025.12.4
     helm:
       valuesObject:
-        # Disable chart-managed secret; inject all secrets via envFrom
         authentik:
-          enabled: false
+          existingSecret:
+            secretName: authentik-secret
 
         global:
           envFrom:
