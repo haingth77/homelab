@@ -45,6 +45,7 @@ nav:
   - AI Agents: ai-agents.md
   - Apps:
       - ArgoCD: argocd.md
+      - Authentik: authentik.md
       - Gitea: gitea.md
       - PostgreSQL: postgresql.md
       - External Secrets: external-secrets.md

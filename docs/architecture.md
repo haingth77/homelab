@@ -23,6 +23,7 @@ flowchart TD
         C --> H["Application: postgresql"]
         C --> I["Application: gitea"]
         C --> J["Application: monitoring"]
+        C --> K["Application: authentik"]
         D --> E
     end
 
@@ -74,7 +75,7 @@ Applications are organized into three **AppProjects** that scope which repos, na
 |---|---|---|
 | `secrets` | Secret management infrastructure | `infisical`, `external-secrets`, `external-secrets-config` |
 | `data` | Databases and data stores | `postgresql` |
-| `apps` | User-facing applications | `gitea`, `monitoring`, `openclaw` |
+| `apps` | User-facing applications | `gitea`, `monitoring`, `authentik`, `openclaw` |
 | `default` | Bootstrap only | `argocd-apps` (root) |
 
 ```mermaid
@@ -105,6 +106,7 @@ flowchart LR
         subgraph appsProj["apps project"]
             GiteaApp["gitea"]
             MonApp["monitoring"]
+            AuthApp["authentik"]
             OCApp["openclaw"]
         end
     end
@@ -198,9 +200,19 @@ flowchart TD
         GrafanaPod --> PromPod
     end
 
+    subgraph authentikNs["authentik namespace"]
+        AuthentikPod["Authentik SSO\nNodePort :30500"]
+        AuthentikPG["PostgreSQL\n(Authentik internal)"]
+        AuthentikPod --> AuthentikPG
+    end
+
     subgraph openclawNs["openclaw namespace"]
         OpenClawPod["OpenClaw Gateway\nNodePort :30789"]
     end
+
+    AuthentikPod -. "OIDC" .-> GrafanaPod
+    AuthentikPod -. "OIDC" .-> ArgoServer
+    AuthentikPod -. "OIDC" .-> GiteaPod
 
     ESOPod --> CSS
     CSS -- "Universal Auth" --> InfisicalPod
@@ -220,6 +232,7 @@ Services are exposed through **Tailscale Serve**, which provides automatic TLS c
 | Gitea | `:30300` | `https://holdens-mac-mini.story-larch.ts.net` | 443 |
 | Grafana | `:30090` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 |
 | Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 |
+| Authentik | `:30500` | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 |
 | OpenClaw | `:30789` | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 |
 
 For the full networking reference, see [docs/networking.md](./networking.md).
@@ -255,10 +268,11 @@ homelab/
 │       ├── argocd/                 # App of Apps: AppProjects + Application CRs
 │       │   ├── projects/           # AppProject CRs (secrets, data, apps)
 │       │   └── applications/       # Application CRs
+│       ├── authentik/              # Authentik SSO ExternalSecret
 │       ├── external-secrets/       # ClusterSecretStore
 │       ├── infisical/              # (Helm chart managed by Terraform-created Application)
 │       ├── gitea/                  # Gitea kustomize manifests + ExternalSecret
-│       ├── (monitoring deployed via Helm chart — see monitoring-app.yaml)
+│       ├── monitoring/             # Grafana ExternalSecret
 │       ├── openclaw/               # OpenClaw AI gateway manifests
 │       └── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
 └── docs/                           # Extended documentation
