@@ -198,7 +198,7 @@ Sub-agents run in isolated sessions with `maxSpawnDepth: 2` (orchestrator patter
 1. Add the agent to `configmap.yaml` under `agents.list`
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `deployment.yaml`
-4. Add it to `agents.defaults.subagents.allowAgents` and `tools.agentToAgent.allow`
+4. Add it to `tools.agentToAgent.allow` in the configmap
 5. Push to `main`
 
 ### Adding a new skill

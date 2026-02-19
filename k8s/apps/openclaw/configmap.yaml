@@ -42,8 +42,7 @@ data:
             "maxSpawnDepth": 2,
             "maxConcurrent": 4,
             "maxChildrenPerAgent": 3,
-            "archiveAfterMinutes": 120,
-            "allowAgents": ["homelab-admin", "devops-sre", "software-engineer", "security-analyst"]
+            "archiveAfterMinutes": 120
           }
         }
       },

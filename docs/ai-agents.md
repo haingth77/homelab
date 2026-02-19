@@ -97,7 +97,7 @@ Agent config lives in two places:
 1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list`
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
-4. Add the agent ID to `allowAgents` and `agentToAgent.allow` in the configmap
+4. Add the agent ID to `tools.agentToAgent.allow` in the configmap
 5. Push to `main` and restart: `kubectl rollout restart deployment/openclaw -n openclaw`
 
 ### Sub-agent Spawning
