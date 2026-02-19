@@ -534,7 +534,7 @@ All agents inherit their model from `agents.defaults.model`:
 | Primary | `google/gemini-2.5-pro` |
 | Fallback | `ollama/qwen2.5-coder:7b` (local, zero cost) |
 
-When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local Ollama model. No per-agent model override is set — removing per-agent `model` fields ensures every agent inherits the fallback chain.
+When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local Ollama model. Each agent's `model` is set using the **object form** `{ primary, fallbacks }` to ensure fallbacks are resolved per-agent. A plain string `model` only overrides `primary` and discards fallbacks.
 
 Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 
@@ -657,7 +657,7 @@ kubectl exec -n openclaw deploy/openclaw -- node dist/index.js config get
 | 401 Unauthorized on gateway | Wrong `OPENCLAW_GATEWAY_TOKEN` | Verify the token in Infisical matches what you use in requests |
 | Model API errors | Invalid or expired API key | Update the key in Infisical; force ESO re-sync; restart pod |
 | Gemini 429 rate limit | Gemini free tier exhausted | Automatic fallback to Ollama; or wait for quota reset; or add more Gemini API keys |
-| Fallback model not activating | Per-agent `model` field overrides `agents.defaults.model` | Remove per-agent `"model"` from `agents.list[]` entries so all agents inherit defaults (which includes fallbacks). Per-agent model is a string, not an object, so it cannot carry fallbacks. |
+| Fallback model not activating | Per-agent `model` is a plain string (only overrides primary, discards fallbacks) | Set per-agent `model` as object form: `{ "primary": "...", "fallbacks": ["..."] }`. A string-form model only sets primary and loses the fallback chain. |
 | Ollama fallback not working | Ollama not running on host | `brew services start ollama` on the host; verify with `curl http://127.0.0.1:11434/api/tags` |
 | Ollama unreachable from pod | `host.internal` DNS issue | `kubectl exec -n openclaw deploy/openclaw -- wget -qO- http://host.internal:11434/api/tags` to diagnose |
 | Tailscale URL not responding | `tailscale serve` not configured | Run `tailscale serve --bg --https 8447 http://localhost:30789` |
