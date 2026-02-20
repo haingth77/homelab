@@ -41,10 +41,6 @@ spec:
               type: none
 
         server:
-          securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
-            runAsNonRoot: true
           replicas: 1
           service:
             type: NodePort
@@ -52,10 +48,6 @@ spec:
             nodePortHttps: 30501
 
         worker:
-          securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
-            runAsNonRoot: true
           replicas: 1
 
         postgresql:
