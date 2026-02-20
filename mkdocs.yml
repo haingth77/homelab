@@ -43,6 +43,7 @@ nav:
   - Bootstrap: bootstrap.md
   - Secret Management: secret-management.md
   - AI Agents: ai-agents.md
+  - Git Workflow: git-workflow.md
   - Apps:
       - ArgoCD: argocd.md
       - Authentik: authentik.md
