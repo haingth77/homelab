@@ -29,7 +29,7 @@ When creating or editing Application CRs, follow the rules in `k8s/apps/argocd/R
 
 ## Secrets
 
-Never put secret values in manifests. Use an `ExternalSecret` resource that references keys from Infisical. See `skills/secret-management/SKILL.md` for the pattern.
+Never put secret values in manifests. Use an `ExternalSecret` resource that references keys from Infisical. Use the `/secret-management` skill for the pattern.
 
 ## Kustomize
 
@@ -63,7 +63,7 @@ When adding `securityContext` to a deployment:
 
 ## Rollback
 
-All rollbacks go through git (revert commit → push → ArgoCD syncs). Never rely solely on `kubectl rollout undo` — ArgoCD will overwrite it. See `skills/incident-response/SKILL.md` for the full procedure. Quick reference:
+All rollbacks go through git (revert commit → push → ArgoCD syncs). Never rely solely on `kubectl rollout undo` — ArgoCD will overwrite it. Use the `/incident-response` skill for the full procedure. Quick reference:
 
 ```bash
 git revert <bad-commit> -m 1 --no-edit && git push origin main
