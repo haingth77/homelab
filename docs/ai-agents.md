@@ -165,12 +165,12 @@ sequenceDiagram
 **Step-by-step process (every agent follows this):**
 
 1. **Clone the repo** into the agent's workspace and **set git identity** (`git config user.name "<agent-id>[bot]"`, `git config user.email "<agent-id>@openclaw.homelab"`)
-2. **Create a labeled GitHub issue** via `gh issue create` with `--assignee holdennguyen --label "agent:<id>,type:<type>,area:<area>,priority:<priority>"` — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
+2. **Create a labeled GitHub issue** via `gh issue create` with `--assignee holdennguyen --label "agent:<id>,type:<type>,area:<area>,priority:<priority>" --milestone "<current-milestone>"` — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer. If no open milestone exists, ask the orchestrator (or user) to create one.
 3. **Create a branch** from main: `<agent-id>/<type>/<issue-number>-<short-description>` (prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`)
 4. **Make changes** to manifests, config, docs
 5. **Commit** with a message referencing the issue and agent: `<type>: <description> (#<issue-number>) [<agent-id>]`
 6. **Keep branch up to date** — before every push, run `git fetch origin main && git merge origin/main --no-edit` to incorporate any changes merged to `main` since the branch was created. Resolve conflicts if needed; never force-push.
-7. **Push** and **create a labeled PR** via `gh pr create` with the same labels — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
+7. **Push** and **create a labeled PR** via `gh pr create` with the same labels and `--milestone "<current-milestone>"` — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
 8. **Report** the PR URL back to the orchestrator or user
 
 ### GitHub Labels
@@ -183,8 +183,9 @@ Every issue and PR created by agents MUST be labeled. Labels serve as the tracki
 | **Type** | `type:feat`, `type:fix`, `type:chore`, `type:docs`, `type:refactor`, `type:security` | Exactly one — what kind of change |
 | **Area** | `area:k8s`, `area:terraform`, `area:argocd`, `area:secrets`, `area:monitoring`, `area:networking`, `area:openclaw`, `area:auth`, `area:gitea` | One or more — what part of the homelab |
 | **Priority** | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | Exactly one — urgency |
+| **Semver** | `semver:breaking` | Only when a change has breaking impact regardless of type (most PRs don't need this) |
 
-All issues and PRs are assigned to `holdennguyen` (repo owner) since agents are not GitHub collaborators. The `agent:*` label identifies which agent is responsible.
+All issues and PRs are assigned to `holdennguyen` (repo owner) since agents are not GitHub collaborators. The `agent:*` label identifies which agent is responsible. Every issue and PR MUST also be assigned to a milestone (see [Semantic Versioning & Releases](#semantic-versioning--releases)).
 
 ### Agent Footprint
 
@@ -213,6 +214,34 @@ Each agent sets its git identity during workspace setup using `git config user.n
 - `git` and `gh` CLI are baked into the container image (`Dockerfile.openclaw`)
 - `GITHUB_TOKEN` from Infisical provides authentication for `gh` CLI
 - Per-agent git identity is set via `git config` in each cloned repo (no shared global identity)
+
+### Semantic Versioning & Releases
+
+The homelab repository follows [Semantic Versioning 2.0.0](https://semver.org/) (`vMAJOR.MINOR.PATCH`). Releases group work that has been merged to `main` into versioned, tagged milestones.
+
+**Version bump rules** — the highest-impact change in a milestone determines the version:
+
+| Condition | Bump | Example |
+|---|---|---|
+| Any PR has `semver:breaking` | **MAJOR** | Terraform state migration, removed service |
+| At least one `type:feat` (no breaking) | **MINOR** | New service, new agent, new capability |
+| Only fixes, chores, docs, refactors, security | **PATCH** | Bug fix, dependency update, doc improvement |
+
+**Milestones** group issues and PRs into planned releases:
+
+- Named with the target version (e.g., `v0.3.0`)
+- Every issue and PR MUST be assigned to a milestone
+- `homelab-admin` creates milestones and adjusts the version if breaking changes are introduced
+- Sub-agents check for the current open milestone before creating issues
+
+**Release process** (owned by `homelab-admin` or the user — sub-agents never create tags or releases):
+
+1. Verify all issues in the milestone are closed
+2. Determine the version from the highest-impact PR
+3. Create a git tag and GitHub Release with auto-generated notes (`gh release create`)
+4. Close the milestone and create the next one
+
+GitHub auto-generates release notes from merged PRs, using the existing type and area labels for grouping.
 
 ### Agent Configuration
 

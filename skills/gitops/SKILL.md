@@ -83,6 +83,14 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
 | `priority:medium` | Normal work, improvements |
 | `priority:low` | Nice to have, minor enhancements |
 
+**Semver label** — only when the type label alone is insufficient:
+
+| Label | When to use |
+|---|---|
+| `semver:breaking` | The change has a breaking impact regardless of its type (e.g., a `type:refactor` that renames Terraform outputs, a `type:feat` that removes an existing API) |
+
+Most PRs do NOT need a semver label — the version bump is derived from the type label automatically (see [Semantic Versioning](#semantic-versioning)).
+
 ### Agent footprint (mandatory)
 
 Every action MUST be traceable to the specific agent that performed it. This is non-negotiable.
@@ -136,7 +144,7 @@ Example: `devops-sre/feat/42-redis-caching`
 
 ### Step-by-step process
 
-1. **Create a GitHub issue** — every change starts with a labeled issue:
+1. **Create a GitHub issue** — every change starts with a labeled issue assigned to the current milestone:
    ```bash
    gh issue create \
      --title "<type>: <description>" \
@@ -149,9 +157,10 @@ Example: `devops-sre/feat/42-redis-caching`
    )" \
      --assignee holdennguyen \
      --label "agent:<your-agent-id>,type:<type>,area:<area>,priority:<priority>" \
+     --milestone "<current-milestone>" \
      --repo holdennguyen/homelab
    ```
-   Capture the issue number from the output.
+   Capture the issue number from the output. If no open milestone exists, ask the orchestrator (or user) to create one before proceeding.
 
 2. **Create a branch** from latest main:
    ```bash
@@ -180,13 +189,14 @@ Example: `devops-sre/feat/42-redis-caching`
    git commit -m "<type>: <description> (#<issue-number>) [<your-agent-id>]"
    ```
 
-5. **Push and create a labeled PR**:
+5. **Push and create a labeled PR** assigned to the same milestone as the issue:
    ```bash
    git push -u origin HEAD
    gh pr create \
      --title "<type>: <description>" \
      --label "agent:<your-agent-id>,type:<type>,area:<area>,priority:<priority>" \
      --assignee holdennguyen \
+     --milestone "<current-milestone>" \
      --body "$(cat <<'EOF'
    Closes #<issue-number>
 
@@ -288,6 +298,138 @@ Follow the mandatory git workflow above, then:
 3. Add the file to `k8s/apps/argocd/kustomization.yaml` resources list
 4. Update `k8s/apps/<name>/README.md` and `docs/<name>.md`
 5. Commit, push, and create PR
+
+## Semantic Versioning
+
+The homelab repository follows [Semantic Versioning 2.0.0](https://semver.org/) with the format `vMAJOR.MINOR.PATCH` (e.g., `v0.3.1`).
+
+### Version bump rules
+
+The version bump for a release is determined by the **highest-impact change** among all PRs in the milestone:
+
+| Condition | Bump | Example |
+|---|---|---|
+| Any PR has the `semver:breaking` label | **MAJOR** | Terraform state migration, removed service, renamed secrets that break consumers |
+| At least one `type:feat` PR (no breaking) | **MINOR** | New service, new agent, new skill, new capability |
+| Only `type:fix`, `type:chore`, `type:docs`, `type:refactor`, `type:security` PRs | **PATCH** | Bug fix, dependency update, doc improvement, security hardening |
+
+Priority order: MAJOR > MINOR > PATCH. A single breaking PR escalates the entire release to MAJOR.
+
+### What counts as breaking
+
+A change is breaking if it requires manual intervention to adopt or causes existing functionality to stop working:
+
+- Terraform state changes that require `terraform state mv` or re-import
+- Removing or renaming a service, namespace, or secret key
+- Changing a NodePort number or Tailscale Serve port
+- Modifying ArgoCD project permissions that block existing apps
+- Changing the OpenClaw agent config structure in a non-backward-compatible way
+
+When in doubt, add `semver:breaking` — it's safer to over-classify than to surprise users.
+
+## Milestones
+
+GitHub Milestones group issues and PRs into planned releases. Every issue and PR MUST be assigned to a milestone.
+
+### Milestone naming
+
+Milestones are named with the target version: `vMAJOR.MINOR.PATCH` (e.g., `v0.3.0`). The version in the milestone name is the **planned** version — it may change if a breaking change is introduced mid-milestone.
+
+### Milestone lifecycle
+
+1. **Create** — `homelab-admin` (or the user) creates the next milestone:
+   ```bash
+   gh api repos/holdennguyen/homelab/milestones \
+     --method POST \
+     -f title="v<MAJOR>.<MINOR>.<PATCH>" \
+     -f description="<high-level goal for this release>"
+   ```
+
+2. **Assign** — every agent assigns their issues and PRs to the current open milestone using `--milestone` on `gh issue create` and `gh pr create`
+
+3. **Track** — check milestone progress:
+   ```bash
+   gh api repos/holdennguyen/homelab/milestones --jq '.[] | select(.state=="open") | "\(.title): \(.open_issues) open, \(.closed_issues) closed"'
+   ```
+
+4. **Close** — when all issues in the milestone are resolved and the release is cut, close the milestone:
+   ```bash
+   gh api repos/holdennguyen/homelab/milestones/<milestone-number> \
+     --method PATCH -f state="closed"
+   ```
+
+### Finding the current milestone
+
+Before creating an issue or PR, check for the current open milestone:
+
+```bash
+gh api repos/holdennguyen/homelab/milestones --jq '.[] | select(.state=="open") | .title' | head -1
+```
+
+If no open milestone exists, ask the orchestrator (or user) to create one. Never create issues or PRs without a milestone.
+
+### Adjusting the milestone version
+
+If a `semver:breaking` PR is merged into a milestone originally planned as a MINOR release (e.g., `v0.3.0`), the milestone should be renamed to reflect the MAJOR bump (e.g., `v1.0.0`). The orchestrator handles this:
+
+```bash
+gh api repos/holdennguyen/homelab/milestones/<milestone-number> \
+  --method PATCH -f title="v<new-version>"
+```
+
+## Releases
+
+Releases are cut when a milestone is complete. The `homelab-admin` orchestrator (or the user) owns the release process. Sub-agents do NOT create releases or tags.
+
+### Release process
+
+1. **Verify** all issues in the milestone are closed:
+   ```bash
+   gh api repos/holdennguyen/homelab/milestones --jq '.[] | select(.title=="<version>") | "open: \(.open_issues), closed: \(.closed_issues)"'
+   ```
+
+2. **Determine the version** by scanning the milestone's PRs for the highest semver impact:
+   ```bash
+   # Check for breaking changes
+   gh pr list --repo holdennguyen/homelab --state merged --label "semver:breaking" --search "milestone:<version>" --json number,title --jq '.[].title'
+   # Check for features
+   gh pr list --repo holdennguyen/homelab --state merged --label "type:feat" --search "milestone:<version>" --json number,title --jq '.[].title'
+   ```
+
+3. **Create the tag and GitHub Release** with auto-generated release notes:
+   ```bash
+   gh release create "v<MAJOR>.<MINOR>.<PATCH>" \
+     --repo holdennguyen/homelab \
+     --target main \
+     --title "v<MAJOR>.<MINOR>.<PATCH>" \
+     --generate-notes \
+     --latest
+   ```
+
+4. **Close the milestone**:
+   ```bash
+   gh api repos/holdennguyen/homelab/milestones/<milestone-number> \
+     --method PATCH -f state="closed"
+   ```
+
+5. **Create the next milestone** for upcoming work:
+   ```bash
+   gh api repos/holdennguyen/homelab/milestones \
+     --method POST \
+     -f title="v<next-version>" \
+     -f description="<goal>"
+   ```
+
+### Release notes
+
+GitHub auto-generates release notes from merged PRs. The existing type and area labels provide natural grouping. No manual CHANGELOG is needed.
+
+### What NOT to do with releases
+
+- Sub-agents MUST NOT create tags or releases — only `homelab-admin` (or the user)
+- Never tag an unmerged branch — tags are always on `main`
+- Never skip the milestone — every PR must be traceable to the release it shipped in
+- Never reuse a version tag — if a release needs a fix, bump PATCH and release again
 
 ## Troubleshooting
 

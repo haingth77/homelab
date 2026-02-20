@@ -141,6 +141,8 @@ The git workflow details are embedded in each agent's `AGENTS.md` personality an
 
 **Branch freshness:** Agents are required to keep their feature branch up to date with `main` by running `git fetch origin main && git merge origin/main --no-edit` before every push. This prevents stale branches and merge conflicts when the PR is merged.
 
+**Milestones and releases:** Every issue and PR is assigned to a GitHub Milestone representing the next planned release (`vMAJOR.MINOR.PATCH`). Version bumps follow semantic versioning — derived from type labels (`type:feat` → MINOR, `type:fix` → PATCH) with an explicit `semver:breaking` label for MAJOR bumps. The `homelab-admin` orchestrator owns the release process: tagging `main`, creating GitHub Releases with auto-generated notes, and managing the milestone lifecycle. Sub-agents never create tags or releases.
+
 ### Agent Footprint
 
 Every action is traceable to the specific agent that performed it:

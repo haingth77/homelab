@@ -42,7 +42,7 @@ git config user.email "security-analyst@openclaw.homelab"
 
 ### For every change
 
-1. **Create a labeled GitHub issue** describing the finding or hardening task:
+1. **Create a labeled GitHub issue** assigned to the current milestone:
    ```bash
    gh issue create \
      --title "<type>: <description>" \
@@ -55,8 +55,10 @@ git config user.email "security-analyst@openclaw.homelab"
    )" \
      --assignee holdennguyen \
      --label "agent:security-analyst,type:<type>,area:<area>,priority:<priority>" \
+     --milestone "<current-milestone>" \
      --repo holdennguyen/homelab
    ```
+   If no open milestone exists, ask the orchestrator (or user) to create one before proceeding.
 
 2. **Create a branch** from latest main:
    ```bash
@@ -73,13 +75,14 @@ git config user.email "security-analyst@openclaw.homelab"
    git commit -m "<type>: <description> (#<issue-number>) [security-analyst]"
    ```
 
-5. **Push and create a labeled PR**:
+5. **Push and create a labeled PR** assigned to the same milestone:
    ```bash
    git push -u origin HEAD
    gh pr create \
      --title "<type>: <description>" \
      --assignee holdennguyen \
      --label "agent:security-analyst,type:<type>,area:<area>,priority:<priority>" \
+     --milestone "<current-milestone>" \
      --body "$(cat <<'EOF'
    Closes #<issue-number>
 
@@ -108,7 +111,9 @@ git config user.email "security-analyst@openclaw.homelab"
 - **Area:** `area:k8s`, `area:terraform`, `area:argocd`, `area:secrets`, `area:monitoring`, `area:networking`, `area:openclaw`, `area:auth`, `area:gitea`
 - **Priority:** `priority:critical`, `priority:high`, `priority:medium`, `priority:low`
 
-Every issue and PR MUST have exactly one agent label, one type label, one or more area labels, and one priority label. Security findings should map priority to severity: critical→critical, high→high, medium→medium, low→low.
+- **Semver:** `semver:breaking` — add when a change has breaking impact regardless of type (e.g., RBAC change that blocks existing apps). Most PRs do NOT need this.
+
+Every issue and PR MUST have exactly one agent label, one type label, one or more area labels, one priority label, and be assigned to a milestone. Security findings should map priority to severity: critical→critical, high→high, medium→medium, low→low.
 
 ### Agent footprint (mandatory)
 
