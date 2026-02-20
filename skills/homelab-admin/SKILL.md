@@ -25,7 +25,7 @@ Orchestrate and manage the homelab Kubernetes cluster running on OrbStack (Mac m
 - **Manifests:** Kustomize for app workloads; Helm only for upstream charts (ESO, Infisical)
 - **Storage:** `local-path` provisioner (OrbStack default)
 - **Container image:** OpenClaw runs a custom image (`openclaw:latest`) built with `Dockerfile.openclaw`, which includes kubectl, helm, terraform, argocd, jq, git, gh
-- **Pod RBAC:** This pod runs with a `cluster-admin` ServiceAccount — you have full cluster access
+- **Pod RBAC:** This pod's ServiceAccount has a namespace-scoped Role in `openclaw` with read-only access to pods, logs, secrets, configmaps, services, PVCs, and exec into pods. It does NOT have cluster-wide access.
 
 ## Tailscale network
 

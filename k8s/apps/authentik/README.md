@@ -42,6 +42,17 @@ flowchart TD
 
 > **Note:** Authentik is deployed via the **Helm chart source** defined in `k8s/apps/argocd/applications/authentik-app.yaml`. This directory only contains the ExternalSecret that provides credentials to the Helm release. The `authentik-config` ArgoCD Application syncs this directory, while the `authentik` Application syncs the upstream Helm chart.
 
+## Security
+
+Authentik's server and worker pods run as non-root users. The pod-level securityContext is configured with:
+
+- `runAsUser: 1000`
+- `runAsGroup: 1000`
+- `runAsNonRoot: true`
+- `fsGroup: 1000`
+
+These settings ensure compliance with the cluster's restricted Pod Security Standard. The embedded PostgreSQL instance also runs as a non-root user (UID 999).
+
 ## OIDC Providers
 
 Each service has a dedicated OIDC provider in Authentik with its own client ID and secret:
