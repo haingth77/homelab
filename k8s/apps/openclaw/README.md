@@ -232,21 +232,38 @@ To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_
 
 4. Push to `main` — ArgoCD syncs the change automatically.
 
-### Model Provider (OpenRouter)
+### Model Configuration
 
-All agents use **OpenRouter** as the model provider. OpenRouter is a built-in provider in OpenClaw -- no custom `models.providers` config is needed, just the `OPENROUTER_API_KEY` environment variable.
+**Model strategy:** `openrouter/stepfun/step-3.5-flash:free` is the primary model (free tier via OpenRouter). `google/gemini-2.5-pro` is the fallback -- when the primary fails or hits rate limits, OpenClaw automatically falls through to Gemini.
 
-**Model strategy:** `openrouter/stepfun/step-3.5-flash:free` is the primary model (free tier via OpenRouter). `google/gemini-2.5-pro` is configured as the fallback -- when the primary model fails or hits rate limits, OpenClaw automatically falls through to Gemini. Both are configured in `agents.defaults.model` in the configmap.
+Both OpenRouter and Google Gemini are built-in providers in OpenClaw. Auth is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` env vars (synced from Infisical).
+
+#### Model config convention (IMPORTANT)
+
+OpenClaw has two places to set models: `agents.defaults.model` and per-agent `agents.list[].model`. The critical rule:
+
+> **Always set `model` as an object `{ "primary": "...", "fallbacks": ["..."] }` on EVERY agent in `agents.list[]`.**
+
+Why:
+
+- `agents.defaults.model` fallbacks **do not propagate** to the per-agent UI view.
+- A plain string `model` (e.g. `"model": "google/gemini-2.5-pro"`) only sets `primary` and **discards fallbacks**.
+- Only the object form `{ "primary", "fallbacks" }` on each agent ensures fallbacks are resolved and visible in the UI.
+
+When changing models, update **both** `agents.defaults.model` (the canonical source) **and** every `agents.list[].model` entry. Keep them in sync.
 
 #### Switching models
 
 ```bash
-# Update agents.defaults.model.primary in configmap.yaml
-# Example refs:
+# In configmap.yaml, update BOTH:
+#   1. agents.defaults.model.primary and agents.defaults.model.fallbacks
+#   2. agents.list[].model.primary and agents.list[].model.fallbacks (every agent)
+#
+# Example primary refs:
 #   openrouter/stepfun/step-3.5-flash:free
 #   openrouter/anthropic/claude-opus-4-6
 #   openrouter/openai/gpt-5.2
-#   openrouter/google/gemini-2.5-pro
+#   google/gemini-2.5-pro
 # Push to main — ArgoCD syncs
 ```
 
@@ -492,14 +509,14 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `security-analyst` | Security audits, vulnerability assessment, hardening | `/data/workspaces/security-analyst` |
 | `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
 
-All agents inherit their model from `agents.defaults.model`:
+Every agent has an explicit object-form `model` in the configmap (see [Model config convention](#model-config-convention-important)):
 
 | Setting | Value |
 |---|---|
 | Primary | `openrouter/stepfun/step-3.5-flash:free` |
 | Fallback | `google/gemini-2.5-pro` |
 
-Both OpenRouter and Google Gemini are built-in providers in OpenClaw. Authentication is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` (both synced from Infisical). No per-agent model override is set -- all agents inherit the default. When the primary model fails, OpenClaw automatically falls through to Gemini.
+When the primary model fails, OpenClaw automatically falls through to Gemini. Auth is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` (both synced from Infisical).
 
 Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 

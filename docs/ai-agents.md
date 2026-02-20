@@ -96,14 +96,16 @@ OpenClaw runs five agents in an orchestrator pattern. The `homelab-admin` agent 
 | `security-analyst` | Security audits, hardening | `/data/workspaces/security-analyst` |
 | `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
 
-All agents inherit their model from `agents.defaults.model` (no per-agent override):
+Every agent has an explicit object-form `model` with `{ primary, fallbacks }` in the configmap:
 
 | Setting | Value |
 |---|---|
 | Primary | `openrouter/stepfun/step-3.5-flash:free` |
 | Fallback | `google/gemini-2.5-pro` |
 
-The primary model is a free-tier model via OpenRouter. When it fails or hits rate limits, OpenClaw automatically falls through to Google Gemini 2.5 Pro. Both are built-in providers -- authentication is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` env vars, synced from Infisical.
+When the primary fails or hits rate limits, OpenClaw falls through to Gemini. Auth is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` env vars (synced from Infisical).
+
+**Convention:** Per-agent `model` must always use the object form `{ "primary": "...", "fallbacks": ["..."] }`. A plain string discards fallbacks. See the [OpenClaw README](../k8s/apps/openclaw/README.md#model-config-convention-important) for details.
 
 ### How the Orchestrator Works
 

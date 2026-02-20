@@ -20,6 +20,7 @@ data:
             "name": "Homelab Admin",
             "default": true,
             "workspace": "/data/workspaces/homelab-admin",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["homelab-admin", "gitops", "secret-management"],
             "subagents": {
               "allowAgents": ["devops-sre", "software-engineer", "security-analyst", "qa-tester"]
@@ -29,6 +30,7 @@ data:
             "id": "devops-sre",
             "name": "DevOps SRE",
             "workspace": "/data/workspaces/devops-sre",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["devops-sre", "gitops", "secret-management"],
             "subagents": {
               "allowAgents": ["software-engineer", "security-analyst", "qa-tester"]
@@ -38,6 +40,7 @@ data:
             "id": "software-engineer",
             "name": "Software Engineer",
             "workspace": "/data/workspaces/software-engineer",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["software-engineer"],
             "subagents": {
               "allowAgents": ["devops-sre", "security-analyst", "qa-tester"]
@@ -47,6 +50,7 @@ data:
             "id": "security-analyst",
             "name": "Security Analyst",
             "workspace": "/data/workspaces/security-analyst",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["security-analyst", "secret-management"],
             "subagents": {
               "allowAgents": ["devops-sre", "software-engineer", "qa-tester"]
@@ -56,6 +60,7 @@ data:
             "id": "qa-tester",
             "name": "QA Tester",
             "workspace": "/data/workspaces/qa-tester",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["qa-tester", "gitops"],
             "subagents": {
               "allowAgents": ["devops-sre", "software-engineer"]
