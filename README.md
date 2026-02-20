@@ -118,9 +118,7 @@ homelab/
 │       └── trivy-operator/        # Container image vulnerability scanning
 ├── docs/                          # MkDocs documentation site
 ├── agents/                        # OpenClaw agent definitions
-│   ├── root_rules.md              # Shared rules for all agents
-│   ├── <role>_agent/              # Agent personality definitions (6 roles)
-│   └── workspaces/                # Per-agent AGENTS.md workspace configs
+│   └── workspaces/                # Per-agent AGENTS.md personality files (5 agents)
 ├── skills/                        # OpenClaw homelab-specific skills (9 domains)
 ├── openclaw/                      # OpenClaw source (git submodule)
 └── scripts/                       # Helper scripts (image builds, etc.)
