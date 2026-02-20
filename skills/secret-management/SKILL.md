@@ -67,7 +67,7 @@ kubectl get secret <name> -n <ns> -o jsonpath='{.data.<KEY>}' | base64 -d
 | `postgresql-secret` | `gitea-system` | POSTGRES_PASSWORD, POSTGRES_USER, POSTGRES_DB, GITEA_DB_PASSWORD |
 | `gitea-secret` | `gitea-system` | GITEA_SECRET_KEY |
 | `gitea-admin-secret` | `gitea-system` | GITEA_ADMIN_USERNAME, GITEA_ADMIN_PASSWORD, GITEA_ADMIN_EMAIL |
-| `openclaw-secret` | `openclaw` | OPENCLAW_GATEWAY_TOKEN, GEMINI_API_KEY |
+| `openclaw-secret` | `openclaw` | OPENCLAW_GATEWAY_TOKEN, OPENROUTER_API_KEY |
 
 ## Troubleshooting
 

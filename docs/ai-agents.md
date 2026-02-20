@@ -34,13 +34,11 @@ flowchart TD
         HA -->|"sessions_spawn"| QA
     end
 
-    subgraph models ["Model Providers"]
-        Gemini["google/gemini-2.5-pro\n(primary)"]
-        Ollama["ollama/qwen2.5-coder:7b\n(fallback)"]
+    subgraph models ["Model Provider"]
+        OpenRouterM["OpenRouter\nanthropic/claude-sonnet-4-5"]
     end
 
-    openclaw --> Gemini
-    Gemini -.->|"429 rate limit"| Ollama
+    openclaw --> OpenRouterM
 
     Skills -->|"hostPath /skills"| openclaw
     AgentsMD -->|"hostPath → init container"| openclaw
@@ -100,10 +98,9 @@ All agents inherit their model from `agents.defaults.model` (no per-agent overri
 
 | Setting | Value |
 |---|---|
-| Primary | `google/gemini-2.5-pro` |
-| Fallback | `ollama/qwen2.5-coder:7b` (local, zero cost) |
+| Primary | `openrouter/anthropic/claude-sonnet-4-5` |
 
-Ollama runs on the Mac mini host and is reachable from the pod at `http://host.internal:11434/v1`. When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local model.
+All agents use OpenRouter as the model provider (built-in, no custom config needed). Authentication is via `OPENROUTER_API_KEY` env var, synced from Infisical. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
 
 ### How the Orchestrator Works
 

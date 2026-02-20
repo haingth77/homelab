@@ -1,6 +1,6 @@
 # OpenClaw
 
-OpenClaw is a multi-channel AI gateway that serves as the agent orchestration layer for the homelab. It connects to multiple AI model providers (Anthropic, OpenAI, Gemini, etc.) and exposes a unified gateway API for AI agent workflows running on the Mac mini.
+OpenClaw is a multi-channel AI gateway that serves as the agent orchestration layer for the homelab. It connects to AI model providers via OpenRouter and exposes a unified gateway API for AI agent workflows running on the Mac mini.
 
 ## Architecture
 
@@ -28,12 +28,11 @@ flowchart TD
     end
 
     subgraph infisical["Infisical (homelab / prod)"]
-        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nGEMINI_API_KEY\nGITHUB_TOKEN"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGITHUB_TOKEN"]
     end
 
     subgraph providers["AI Model Providers"]
-        Gemini["Google Gemini API\n(primary)"]
-        Ollama["Ollama on host\nqwen2.5-coder:7b\n(fallback)"]
+        OpenRouter["OpenRouter API\nanthropic/claude-sonnet-4-5"]
     end
 
     Clients -- "WireGuard" --> TServe
@@ -46,8 +45,7 @@ flowchart TD
     CSS -- "Universal Auth" --> InfisicalSecrets
     InfisicalSecrets -- "creates" --> K8sSecret
     K8sSecret -- "env vars" --> Deploy
-    Deploy -- "primary" --> Gemini
-    Deploy -- "fallback\n(on 429)" --> Ollama
+    Deploy --> OpenRouter
 ```
 
 ## Directory Contents
@@ -157,7 +155,7 @@ Every action is traceable to the specific agent that performed it:
 
 - OpenClaw Docker image built locally (see [Build the Image](#build-the-image))
 - Secrets added to Infisical (see [Secrets](#secrets))
-- Ollama installed on the host with `qwen2.5-coder:7b` pulled (see [Local Model (Ollama)](#local-model-ollama))
+- OpenRouter API key added to Infisical (see [Secrets](#secrets))
 
 ### Build the Image
 
@@ -196,7 +194,7 @@ Add the following secrets to Infisical under **homelab / prod**:
 | Infisical Key | How to Generate | Required |
 |---|---|---|
 | `OPENCLAW_GATEWAY_TOKEN` | `openssl rand -hex 32` | Yes |
-| `GEMINI_API_KEY` | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | At least one provider |
+| `OPENROUTER_API_KEY` | From [openrouter.ai/keys](https://openrouter.ai/keys) | Yes (model provider) |
 | `GITHUB_TOKEN` | GitHub PAT (Fine-grained) with repo scope for `holdennguyen/homelab` | Yes (for git workflow) |
 
 After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
@@ -231,56 +229,21 @@ To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_
 
 4. Push to `main` — ArgoCD syncs the change automatically.
 
-### Local Model (Ollama)
+### Model Provider (OpenRouter)
 
-Ollama runs on the Mac mini host and provides a local fallback model when Gemini hits rate limits. The OpenClaw pod reaches Ollama via OrbStack's `host.internal` DNS.
+All agents use **OpenRouter** as the model provider. OpenRouter is a built-in provider in OpenClaw -- no custom `models.providers` config is needed, just the `OPENROUTER_API_KEY` environment variable.
 
-**Model strategy:** Gemini 2.5 Pro is the primary model for all agents. When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local Ollama model (`qwen2.5-coder:7b`). This is configured in `agents.defaults.model.fallbacks` in the configmap.
-
-#### Setup (one-time, on the host)
-
-```bash
-# Install Ollama
-brew install ollama
-
-# Start as a background service (auto-starts on boot)
-brew services start ollama
-
-# Pull the model
-ollama pull qwen2.5-coder:7b
-```
-
-#### Model choice rationale
-
-| Model | Size | Context | Why |
-|---|---|---|---|
-| `qwen2.5-coder:7b` | 4.7 GB | 32K tokens | Strong tool-calling and code generation; fits comfortably in 16GB alongside K8s workloads |
-
-The Mac mini has 16GB unified memory. With K8s and macOS overhead (~10GB), a 7B model (~5GB at Q4_K_M) leaves headroom for stable operation.
-
-#### Verify Ollama is running
-
-```bash
-# On the host
-ollama list
-curl -sf http://127.0.0.1:11434/api/tags | jq '.models[].name'
-
-# From inside the OpenClaw pod
-kubectl exec -n openclaw deploy/openclaw -- \
-  wget -qO- http://host.internal:11434/api/tags | jq '.models[].name'
-```
+**Model strategy:** `openrouter/anthropic/claude-sonnet-4-5` is the primary model for all agents, configured in `agents.defaults.model.primary`. OpenRouter provides access to models from Anthropic, OpenAI, Google, Mistral, and other providers through a single API key. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
 
 #### Switching models
 
-To use a different Ollama model, pull it and update the configmap:
-
 ```bash
-# Pull a new model
-ollama pull <model>
-
-# Update configmap.yaml:
-# 1. Change models.providers.ollama.models[0].id
-# 2. Change agents.defaults.model.fallbacks
+# Update agents.defaults.model.primary in configmap.yaml
+# Example refs:
+#   openrouter/anthropic/claude-sonnet-4-5
+#   openrouter/anthropic/claude-opus-4-6
+#   openrouter/openai/gpt-5.2
+#   openrouter/google/gemini-2.5-pro
 # Push to main — ArgoCD syncs
 ```
 
@@ -458,8 +421,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 |---|---|---|---|
 | `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
 | `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
-| `agents.defaults.model` | `primary` / `fallbacks` | Gemini primary, Ollama fallback | Gemini for quality; Ollama local model as rate-limit fallback |
-| `models.providers.ollama` | `baseUrl` | `http://host.internal:11434/v1` | Ollama running on the Mac mini host, reachable from pod via OrbStack DNS |
+| `agents.defaults.model` | `primary` | `openrouter/anthropic/claude-sonnet-4-5` | All agents use OpenRouter as the model provider |
 | `tools.agentToAgent` | `enabled` / `allow` | All 5 agents | Enables inter-agent communication |
 | `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
@@ -471,9 +433,8 @@ OpenClaw runs five agents with the orchestrator pattern: a default `homelab-admi
 
 ```mermaid
 flowchart TD
-    subgraph models["Model Providers"]
-        Gemini["google/gemini-2.5-pro\n(primary)"]
-        OllamaM["ollama/qwen2.5-coder:7b\n(fallback on 429)"]
+    subgraph models["Model Provider"]
+        OpenRouterM["OpenRouter\nanthropic/claude-sonnet-4-5"]
     end
 
     HA["homelab-admin\n(Orchestrator)"]
@@ -487,8 +448,7 @@ flowchart TD
     HA -- "sessions_spawn" --> SA
     HA -- "sessions_spawn" --> QA
 
-    HA & DS & SE & SA & QA --> Gemini
-    Gemini -. "429 rate limit" .-> OllamaM
+    HA & DS & SE & SA & QA --> OpenRouterM
 
     subgraph skills["Skills (/skills)"]
         S1["homelab-admin"]
@@ -531,10 +491,9 @@ All agents inherit their model from `agents.defaults.model`:
 
 | Setting | Value |
 |---|---|
-| Primary | `google/gemini-2.5-pro` |
-| Fallback | `ollama/qwen2.5-coder:7b` (local, zero cost) |
+| Primary | `openrouter/anthropic/claude-sonnet-4-5` |
 
-When Gemini returns a rate-limit error (429), OpenClaw automatically falls through to the local Ollama model. Each agent's `model` is set using the **object form** `{ primary, fallbacks }` to ensure fallbacks are resolved per-agent. A plain string `model` only overrides `primary` and discards fallbacks.
+OpenRouter is a built-in provider in OpenClaw. Authentication is via `OPENROUTER_API_KEY` (synced from Infisical). No per-agent model override is set -- all agents inherit the default. To switch models, change `agents.defaults.model.primary` in the configmap.
 
 Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 
@@ -656,8 +615,6 @@ kubectl exec -n openclaw deploy/openclaw -- node dist/index.js config get
 | Health check `/health` failing | Gateway still starting up | Wait 30s for initial startup; check logs for errors |
 | 401 Unauthorized on gateway | Wrong `OPENCLAW_GATEWAY_TOKEN` | Verify the token in Infisical matches what you use in requests |
 | Model API errors | Invalid or expired API key | Update the key in Infisical; force ESO re-sync; restart pod |
-| Gemini 429 rate limit | Gemini free tier exhausted | Automatic fallback to Ollama; or wait for quota reset; or add more Gemini API keys |
-| Fallback model not activating | Per-agent `model` is a plain string (only overrides primary, discards fallbacks) | Set per-agent `model` as object form: `{ "primary": "...", "fallbacks": ["..."] }`. A string-form model only sets primary and loses the fallback chain. |
-| Ollama fallback not working | Ollama not running on host | `brew services start ollama` on the host; verify with `curl http://127.0.0.1:11434/api/tags` |
-| Ollama unreachable from pod | `host.internal` DNS issue | `kubectl exec -n openclaw deploy/openclaw -- wget -qO- http://host.internal:11434/api/tags` to diagnose |
+| OpenRouter 401/403 | Invalid or missing `OPENROUTER_API_KEY` | Add/update the key in Infisical `homelab / prod / OPENROUTER_API_KEY`; force ESO re-sync; restart pod |
+| OpenRouter rate limit (429) | Account credit exhausted | Top up credits at [openrouter.ai/credits](https://openrouter.ai/credits); or switch to a cheaper model in `agents.defaults.model.primary` |
 | Tailscale URL not responding | `tailscale serve` not configured | Run `tailscale serve --bg --https 8447 http://localhost:30789` |

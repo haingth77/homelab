@@ -72,11 +72,11 @@ spec:
                 secretKeyRef:
                   name: openclaw-secret
                   key: OPENCLAW_GATEWAY_TOKEN
-            - name: GEMINI_API_KEY
+            - name: OPENROUTER_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: openclaw-secret
-                  key: GEMINI_API_KEY
+                  key: OPENROUTER_API_KEY
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
