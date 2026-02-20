@@ -82,10 +82,12 @@ flowchart TD
 ```
 homelab/
 ├── README.md
+├── .doc-manifest.yml              # Doc freshness manifest (doc → source mappings)
 ├── mkdocs.yml                     # MkDocs Material site config
 ├── Dockerfile.openclaw            # Homelab overlay for OpenClaw image
-├── .gitignore                     # Excludes terraform.tfvars and .terraform/
+├── .gitignore                     # Excludes terraform state/tfvars, site/, .DS_Store
 ├── .github/workflows/docs.yml    # GitHub Pages deploy on push to main
+├── .github/workflows/doc-freshness.yml  # PR check for stale documentation
 ├── terraform/                     # Bootstrap layer (run once, not GitOps)
 │   ├── providers.tf               # kubernetes + helm provider config
 │   ├── argocd.tf                  # ArgoCD Helm release + root Application CR
@@ -104,8 +106,11 @@ homelab/
 │       ├── openclaw/              # OpenClaw AI gateway kustomize manifests
 │       └── postgresql/            # PostgreSQL kustomize manifests + ExternalSecret
 ├── docs/                          # MkDocs documentation site
-├── agents/workspaces/             # OpenClaw agent AGENTS.md personalities
-├── skills/                        # OpenClaw homelab-specific skills
+├── agents/                        # OpenClaw agent definitions
+│   ├── root_rules.md              # Shared rules for all agents
+│   ├── <role>_agent/              # Agent personality definitions (6 roles)
+│   └── workspaces/                # Per-agent AGENTS.md workspace configs
+├── skills/                        # OpenClaw homelab-specific skills (9 domains)
 ├── openclaw/                      # OpenClaw source (git submodule)
 └── scripts/                       # Helper scripts (image builds, etc.)
 ```
@@ -252,12 +257,32 @@ kubectl get pods -A | grep -v Running | grep -v Completed
 | [docs/monitoring.md](docs/monitoring.md) | Grafana + Prometheus stack, dashboards, SSO integration |
 | [docs/openclaw.md](docs/openclaw.md) | OpenClaw AI gateway deployment, image builds, multi-agent architecture |
 | [docs/ai-agents.md](docs/ai-agents.md) | Cursor rules + OpenClaw agents/skills, when to use which |
+| [docs/git-workflow.md](docs/git-workflow.md) | Branch conventions, PR requirements, post-merge cleanup for Cursor and OpenClaw |
 | [terraform/README.md](terraform/README.md) | All Terraform variables, what resources are managed, day-2 operations |
 | [k8s/apps/argocd/README.md](k8s/apps/argocd/README.md) | App of Apps pattern, sync waves, adding new applications |
+| [k8s/apps/authentik/README.md](k8s/apps/authentik/README.md) | Authentik SSO deployment, ExternalSecret, OIDC provider configuration |
 | [k8s/apps/infisical/README.md](k8s/apps/infisical/README.md) | Infisical deployment, first-time setup, machine identity, bootstrap secrets |
 | [k8s/apps/external-secrets/README.md](k8s/apps/external-secrets/README.md) | ClusterSecretStore, ExternalSecret pattern, adding secrets for new services |
 | [k8s/apps/gitea/README.md](k8s/apps/gitea/README.md) | Config seeding via init container, env var overrides, ExternalSecret integration |
+| [k8s/apps/monitoring/README.md](k8s/apps/monitoring/README.md) | Grafana + Prometheus monitoring stack, ExternalSecret, SSO integration |
+| [k8s/apps/openclaw/README.md](k8s/apps/openclaw/README.md) | OpenClaw AI gateway deployment, configuration, image builds |
 | [k8s/apps/postgresql/README.md](k8s/apps/postgresql/README.md) | Database configuration, pg_hba.conf, PGDATA layout, password management |
+
+## Documentation Freshness Tracking
+
+Every documentation file is mapped to its implementation sources in [`.doc-manifest.yml`](.doc-manifest.yml). A Python script compares git history to detect when docs fall behind their sources.
+
+```bash
+python scripts/doc-freshness.py              # Full freshness report
+python scripts/doc-freshness.py --stale      # Only stale docs
+python scripts/doc-freshness.py --check-pr   # Check current branch for missing doc updates
+python scripts/doc-freshness.py --json       # JSON output (for automation)
+python scripts/doc-freshness.py --markdown   # Markdown table (for PR comments)
+```
+
+The [`doc-freshness`](.github/workflows/doc-freshness.yml) GitHub Actions workflow runs on every PR to `main`. If implementation sources changed but mapped docs were not updated, it posts a warning comment on the PR with a link to the details. The check is advisory — it does not block merge.
+
+When adding a new service or documentation file, add an entry to `.doc-manifest.yml` so the freshness system tracks it.
 
 ## Future Plans
 

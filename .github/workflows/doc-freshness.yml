@@ -1,0 +1,89 @@
+name: Doc Freshness
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check PR for missing doc updates
+        id: pr_check
+        run: |
+          echo "## 📄 Documentation Freshness" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if python scripts/doc-freshness.py --check-pr --markdown >> "$GITHUB_STEP_SUMMARY" 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No documentation gaps detected." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "status=warn" >> "$GITHUB_OUTPUT"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **Action needed:** update the listed docs or verify they don't need changes." >> "$GITHUB_STEP_SUMMARY"
+            echo "> Run \`python scripts/doc-freshness.py --check-pr\` locally to reproduce." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Full freshness report
+        if: always()
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Full freshness report</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          python scripts/doc-freshness.py --markdown >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR if docs are stale
+        if: steps.pr_check.outputs.status == 'warn'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- doc-freshness-bot -->';
+            const body = [
+              marker,
+              '### 📄 Documentation Freshness Warning',
+              '',
+              'This PR changes implementation files that have mapped documentation, but the docs were not updated.',
+              '',
+              'Please review the **Doc Freshness** check in the Actions tab for details, or run locally:',
+              '```bash',
+              'python scripts/doc-freshness.py --check-pr',
+              '```',
+              '',
+              '> This is a warning — it does not block merge. If the docs genuinely don\'t need updating, this is safe to ignore.',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
