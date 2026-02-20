@@ -27,6 +27,16 @@ flowchart LR
 
 Infisical is the **single source of truth** for all secrets. No secret values live in git. Applications access secrets indirectly through Kubernetes `Secret` objects that ESO keeps in sync with Infisical.
 
+## Security
+
+**Current limitation:** The `infisical-standalone` Helm chart does not expose configuration for pod-level `securityContext`. As a result, Infisical runs with the default user defined in the Docker image (likely `root`). This is a known limitation and prevents the cluster from enforcing a non-root policy on this component.
+
+To improve security, the Infisical container should run as a non-root user. Potential solutions:
+- File an upstream feature request to add `securityContext` values to the chart.
+- Fork the chart and add the necessary configuration.
+
+The `pod-security.kubernetes.io/enforce: restricted` label is **not** applied to the `infisical` namespace, allowing Infisical to run while other namespaces enforce the restricted profile.
+
 ## How It Is Deployed
 
 Infisical is **not** managed by a git-tracked ArgoCD Application CR. Its Helm values contain sensitive credentials (PostgreSQL and Redis passwords) that cannot be committed to git. Instead:
