@@ -87,9 +87,13 @@ documents:
       - agents/
       - skills/
       - .cursor/rules/
+      - scripts/doc-freshness.py
+      - .doc-manifest.yml
 
   - doc: docs/git-workflow.md
     sources:
       - .cursor/rules/homelab.mdc
       - .github/workflows/
       - skills/incident-response/
+      - scripts/doc-freshness.py
+      - .doc-manifest.yml

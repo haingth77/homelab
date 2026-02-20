@@ -288,6 +288,77 @@ helm template <release> <repo>/<chart> --version <version> \
 - [ ] Shared resources (ClusterRoles, CRDs) are not removed or renamed
 - [ ] ExternalSecrets still reference valid keys
 
+## Documentation Freshness Checks
+
+Every documentation file is mapped to its implementation sources in [`.doc-manifest.yml`](https://github.com/holdennguyen/homelab/blob/main/.doc-manifest.yml). A CI workflow and CLI tool use git history to detect when docs fall behind.
+
+### How it works
+
+```mermaid
+flowchart LR
+    Manifest[".doc-manifest.yml\n(doc → source mappings)"]
+    Script["scripts/doc-freshness.py"]
+    Git["git log\n(commit timestamps)"]
+
+    Manifest --> Script
+    Git --> Script
+    Script -->|"source newer than doc"| Stale["STALE\n(X commits behind)"]
+    Script -->|"doc newer or equal"| Fresh["OK"]
+```
+
+For each entry in the manifest, the script compares the **last commit that touched the doc** vs the **last commit that touched any file in its source directories** (excluding the doc itself). If the source is newer, the doc is stale and the report shows how many commits behind it is.
+
+### CI workflow (`doc-freshness`)
+
+The [`doc-freshness`](https://github.com/holdennguyen/homelab/blob/main/.github/workflows/doc-freshness.yml) GitHub Actions workflow runs on every PR to `main`:
+
+1. Examines which files the PR changes
+2. Checks those files against the manifest to find mapped docs
+3. If a mapped doc was **not** updated in the PR, it posts a warning comment
+
+The check is **advisory only** — it does not block merge. If the docs genuinely don't need updating (e.g., a comment change in a source file), the warning is safe to ignore.
+
+### Local usage
+
+```bash
+python scripts/doc-freshness.py                # Full freshness table
+python scripts/doc-freshness.py --stale        # Only stale docs
+python scripts/doc-freshness.py --check-pr     # Files changed on current branch vs origin/main
+python scripts/doc-freshness.py --json         # Machine-readable JSON
+python scripts/doc-freshness.py --markdown     # Markdown table for PR comments
+```
+
+!!! note "`--check-pr` requires a feature branch"
+    The `--check-pr` flag compares `HEAD` against `origin/main`. If you run it on `main` after a merge, there's no diff and it reports "all up-to-date." Always run it from a feature branch before pushing.
+
+### Interpreting the report
+
+```
+  Document                             Status    Doc         Source      Behind
+  ───────────────────────────────────  ────────  ──────────  ──────────  ──────────
+  ✓ k8s/apps/gitea/README.md            ok        3cce3e9c    05e88155    —
+  ✗ docs/networking.md                   STALE     331be14f    f591ad60    25 commits
+```
+
+| Column | Meaning |
+|---|---|
+| Status | `ok` = doc is current, `STALE` = sources are newer, `MISSING` = doc file doesn't exist |
+| Doc | Short hash of the last commit that touched the doc |
+| Source | Short hash of the last commit that touched any source (excluding the doc itself) |
+| Behind | Number of source commits since the doc was last updated |
+
+### Adding a new entry
+
+When creating a new service or documentation file, add an entry to `.doc-manifest.yml`:
+
+```yaml
+- doc: k8s/apps/my-service/README.md
+  sources:
+    - k8s/apps/my-service/
+```
+
+For cross-cutting docs that cover multiple areas, list all relevant source directories.
+
 ## Post-Merge Verification
 
 After every merge to `main`, verify the deployment succeeded:
