@@ -374,6 +374,31 @@ metadata:
 
 Skills auto-load via `skills.load.extraDirs: ["/skills"]` in the OpenClaw config.
 
+## Documentation Maintenance
+
+Both Cursor and OpenClaw agents are expected to keep documentation up-to-date as part of every implementation. The repo includes a **documentation freshness tracking system** to make this verifiable.
+
+### For agents
+
+Before creating a PR, run the freshness checker to see if your changes require doc updates:
+
+```bash
+python scripts/doc-freshness.py --check-pr     # Which docs this branch should update
+python scripts/doc-freshness.py --stale        # Full staleness report across all docs
+```
+
+The tool reads `.doc-manifest.yml` (which maps every doc to its implementation sources) and compares git commit timestamps. If sources are newer than their mapped doc, the doc is flagged as stale with the number of commits behind.
+
+The `doc-freshness` CI workflow runs automatically on every PR to `main` and will post a warning comment if mapped docs are missing updates. The check is advisory — it does not block merge.
+
+### What to update
+
+The `.cursor/rules/homelab.mdc` file contains the full "What to update" table mapping change areas to docs. The key rule: **every service directory under `k8s/apps/` must have a `README.md`** that serves as the single source of truth. The corresponding `docs/<service>.md` is a thin MkDocs wrapper that includes the README.
+
+### When adding a new service
+
+Add an entry to `.doc-manifest.yml` mapping the new service's README to its source directory. This ensures the freshness system tracks it going forward. See the full checklist in `.cursor/rules/homelab.mdc` under "Adding a new service."
+
 ## Single Source of Truth
 
 | Content | Source | Consumed By |
@@ -382,5 +407,6 @@ Skills auto-load via `skills.load.extraDirs: ["/skills"]` in the OpenClaw config
 | Agent personalities | `agents/workspaces/*/AGENTS.md` | OpenClaw (copied into pod workspace by init container) |
 | Operational skills | `skills/*/SKILL.md` | OpenClaw (mounted at `/skills`), Cursor (read on demand) |
 | Agent roster & config | `k8s/apps/openclaw/configmap.yaml` | OpenClaw (mounted at `/config`) |
+| Doc-to-source mappings | `.doc-manifest.yml` | `scripts/doc-freshness.py`, `doc-freshness` CI workflow |
 
 There is no duplication. Each piece of content has exactly one source file in git.
