@@ -11,6 +11,7 @@ spec:
     - git@github.com:holdennguyen/homelab.git
     - https://prometheus-community.github.io/helm-charts
     - https://charts.goauthentik.io
+    - https://aquasecurity.github.io/helm-charts
   destinations:
     - server: https://kubernetes.default.svc
       namespace: gitea-system
@@ -37,3 +38,5 @@ spec:
       kind: MutatingWebhookConfiguration
     - group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
+    - group: aquasecurity.github.io
+      kind: "*"
