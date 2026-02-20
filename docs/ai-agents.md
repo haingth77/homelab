@@ -35,7 +35,7 @@ flowchart TD
     end
 
     subgraph models ["Model Provider"]
-        OpenRouterM["OpenRouter\nanthropic/claude-sonnet-4-5"]
+        OpenRouterM["OpenRouter\nstepfun/step-3.5-flash:free"]
     end
 
     openclaw --> OpenRouterM
@@ -98,7 +98,7 @@ All agents inherit their model from `agents.defaults.model` (no per-agent overri
 
 | Setting | Value |
 |---|---|
-| Primary | `openrouter/anthropic/claude-sonnet-4-5` |
+| Primary | `openrouter/stepfun/step-3.5-flash:free` |
 
 All agents use OpenRouter as the model provider (built-in, no custom config needed). Authentication is via `OPENROUTER_API_KEY` env var, synced from Infisical. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
 

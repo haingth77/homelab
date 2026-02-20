@@ -32,7 +32,7 @@ flowchart TD
     end
 
     subgraph providers["AI Model Providers"]
-        OpenRouter["OpenRouter API\nanthropic/claude-sonnet-4-5"]
+        OpenRouter["OpenRouter API\nstepfun/step-3.5-flash:free"]
     end
 
     Clients -- "WireGuard" --> TServe
@@ -233,14 +233,14 @@ To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_
 
 All agents use **OpenRouter** as the model provider. OpenRouter is a built-in provider in OpenClaw -- no custom `models.providers` config is needed, just the `OPENROUTER_API_KEY` environment variable.
 
-**Model strategy:** `openrouter/anthropic/claude-sonnet-4-5` is the primary model for all agents, configured in `agents.defaults.model.primary`. OpenRouter provides access to models from Anthropic, OpenAI, Google, Mistral, and other providers through a single API key. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
+**Model strategy:** `openrouter/stepfun/step-3.5-flash:free` is the primary model for all agents, configured in `agents.defaults.model.primary`. OpenRouter provides access to models from Anthropic, OpenAI, Google, Mistral, and other providers through a single API key. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
 
 #### Switching models
 
 ```bash
 # Update agents.defaults.model.primary in configmap.yaml
 # Example refs:
-#   openrouter/anthropic/claude-sonnet-4-5
+#   openrouter/stepfun/step-3.5-flash:free
 #   openrouter/anthropic/claude-opus-4-6
 #   openrouter/openai/gpt-5.2
 #   openrouter/google/gemini-2.5-pro
@@ -421,7 +421,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 |---|---|---|---|
 | `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
 | `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
-| `agents.defaults.model` | `primary` | `openrouter/anthropic/claude-sonnet-4-5` | All agents use OpenRouter as the model provider |
+| `agents.defaults.model` | `primary` | `openrouter/stepfun/step-3.5-flash:free` | All agents use OpenRouter as the model provider |
 | `tools.agentToAgent` | `enabled` / `allow` | All 5 agents | Enables inter-agent communication |
 | `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
@@ -434,7 +434,7 @@ OpenClaw runs five agents with the orchestrator pattern: a default `homelab-admi
 ```mermaid
 flowchart TD
     subgraph models["Model Provider"]
-        OpenRouterM["OpenRouter\nanthropic/claude-sonnet-4-5"]
+        OpenRouterM["OpenRouter\nstepfun/step-3.5-flash:free"]
     end
 
     HA["homelab-admin\n(Orchestrator)"]
@@ -491,7 +491,7 @@ All agents inherit their model from `agents.defaults.model`:
 
 | Setting | Value |
 |---|---|
-| Primary | `openrouter/anthropic/claude-sonnet-4-5` |
+| Primary | `openrouter/stepfun/step-3.5-flash:free` |
 
 OpenRouter is a built-in provider in OpenClaw. Authentication is via `OPENROUTER_API_KEY` (synced from Infisical). No per-agent model override is set -- all agents inherit the default. To switch models, change `agents.defaults.model.primary` in the configmap.
 

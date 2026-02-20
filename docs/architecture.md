@@ -225,7 +225,7 @@ flowchart TD
     CSS -- "ExternalSecret" --> GiteaPod
     CSS -- "ExternalSecret" --> PGPod
     CSS -- "ExternalSecret" --> OpenClawPod
-    OpenClawPod -- "OpenRouter API" --> OpenRouterAPI["OpenRouter\nanthropic/claude-sonnet-4-5"]
+    OpenClawPod -- "OpenRouter API" --> OpenRouterAPI["OpenRouter\nstepfun/step-3.5-flash:free"]
     ArgoController -- "poll git" --> GitHub["GitHub\nholdennguyen/homelab"]
 ```
 
