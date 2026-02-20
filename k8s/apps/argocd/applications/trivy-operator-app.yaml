@@ -18,21 +18,13 @@ spec:
     targetRevision: 0.32.0
     helm:
       valuesObject:
-        # Run the operator with limited resources; it's lightweight.
-        operator:
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: 200m
-              memory: 256Mi
-        # Enable the vulnerability reports (enabled by default)
-        trivy:
-          # Configure to scan images of running pods
-          ignoreUnfixed: false
-          # Optionally, config for severity levels; use defaults.
-        # The operator creates VulnerabilityReport CRDs per pod. They can be viewed via kubectl.
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

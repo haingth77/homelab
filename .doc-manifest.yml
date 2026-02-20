@@ -59,6 +59,10 @@ documents:
     sources:
       - k8s/apps/postgresql/
 
+  - doc: k8s/apps/trivy-operator/README.md
+    sources:
+      - k8s/apps/trivy-operator/
+
   - doc: terraform/README.md
     sources:
       - terraform/

@@ -38,3 +38,5 @@ spec:
       kind: MutatingWebhookConfiguration
     - group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
+    - group: aquasecurity.github.io
+      kind: "*"

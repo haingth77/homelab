@@ -40,7 +40,7 @@ The operator is deployed with default settings, which:
 Overrides can be made in the Application CR's `spec.source.helm.valuesObject`.
 
 Key options:
-- `operator.resources`: CPU/memory requests/limits
+- `resources`: CPU/memory requests/limits for the operator deployment
 - `trivy.ignoreUnfixed`: whether to ignore vulnerabilities without a fix
 - `trivy.severity`: filter by severity (e.g., `HIGH`, `CRITICAL`)
 
