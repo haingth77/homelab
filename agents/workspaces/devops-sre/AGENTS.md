@@ -42,7 +42,36 @@ git config user.email "devops-sre@openclaw.homelab"
 
 ### For every change
 
-1. **Create a labeled GitHub issue** assigned to the current milestone:
+1. **Obtain a GitHub issue** — every change is tracked by exactly one issue. **Never create a duplicate.**
+
+   **If you received an existing issue** (assigned by orchestrator, user, or referenced in the task):
+
+   ```bash
+   # Read the issue
+   gh issue view <issue-number> --repo holdennguyen/homelab
+
+   # Add your labels (--add-label won't duplicate existing ones)
+   gh issue edit <issue-number> \
+     --add-label "agent:devops-sre,type:<type>,area:<area>,priority:<priority>" \
+     --repo holdennguyen/homelab
+
+   # Assign milestone if not already set
+   gh issue edit <issue-number> \
+     --milestone "<current-milestone>" \
+     --repo holdennguyen/homelab
+
+   # Comment that you're picking it up
+   gh issue comment <issue-number> --repo holdennguyen/homelab --body "$(cat <<'EOF'
+   Picking up this issue.
+
+   ---
+   Agent: devops-sre | OpenClaw Homelab
+   EOF
+   )"
+   ```
+
+   **If no existing issue (self-initiated work)** — create one:
+
    ```bash
    gh issue create \
      --title "<type>: <description>" \
@@ -58,7 +87,10 @@ git config user.email "devops-sre@openclaw.homelab"
      --milestone "<current-milestone>" \
      --repo holdennguyen/homelab
    ```
+
    If no open milestone exists, ask the orchestrator (or user) to create one before proceeding.
+
+   **How to decide:** If the orchestrator or user mentions an issue number (e.g., "fix #42", "address issue 42") or you were spawned with a task referencing an existing issue, adopt it. Only create a new issue when you discovered the problem yourself and no issue exists yet.
 
 2. **Plan the implementation and comment it on the issue** — before writing any code, post your plan:
    ```bash

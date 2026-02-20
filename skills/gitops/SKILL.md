@@ -144,7 +144,40 @@ Example: `devops-sre/feat/42-redis-caching`
 
 ### Step-by-step process
 
-1. **Create a GitHub issue** (or receive an existing one) — every change starts with a labeled issue assigned to the current milestone:
+1. **Obtain a GitHub issue** — every change is tracked by exactly one issue. **Never create a duplicate.**
+
+   **Scenario A — You received an existing issue** (assigned by user, orchestrator, or referenced in the task):
+
+   Read the issue, adopt it by adding your labels, and comment that you're picking it up:
+
+   ```bash
+   # Read the issue to understand requirements
+   gh issue view <issue-number> --repo holdennguyen/homelab
+
+   # Add your agent label and any missing labels (--add-label won't duplicate existing ones)
+   gh issue edit <issue-number> \
+     --add-label "agent:<your-agent-id>,type:<type>,area:<area>,priority:<priority>" \
+     --repo holdennguyen/homelab
+
+   # Assign to the current milestone if not already assigned
+   gh issue edit <issue-number> \
+     --milestone "<current-milestone>" \
+     --repo holdennguyen/homelab
+
+   # Comment that you're picking it up
+   gh issue comment <issue-number> --repo holdennguyen/homelab --body "$(cat <<'EOF'
+   Picking up this issue.
+
+   ---
+   Agent: <your-agent-id> | OpenClaw Homelab
+   EOF
+   )"
+   ```
+
+   **Scenario B — No existing issue (self-initiated work):**
+
+   Create a new issue:
+
    ```bash
    gh issue create \
      --title "<type>: <description>" \
@@ -160,7 +193,10 @@ Example: `devops-sre/feat/42-redis-caching`
      --milestone "<current-milestone>" \
      --repo holdennguyen/homelab
    ```
+
    Capture the issue number from the output. If no open milestone exists, ask the orchestrator (or user) to create one before proceeding.
+
+   **How to decide:** If the user or orchestrator mentions an issue number (e.g., "fix #42", "address issue 42"), or if you were spawned with a task that references an existing issue, use Scenario A. Only use Scenario B when you discovered the problem yourself and no issue exists yet.
 
 2. **Plan the implementation and comment it on the issue** — before writing any code, post your plan as a comment:
    ```bash
@@ -343,6 +379,7 @@ git push origin main
 - Never bundle unrelated changes in one PR
 - Never use `kubectl apply` for persistent resources (ArgoCD will revert them)
 - Never create an issue or PR without labels
+- **Never create a new issue when an existing one was provided** — adopt it with `gh issue edit` and `gh issue comment` instead
 - Never commit without the `[<agent-id>]` suffix in the message
 - Never create an issue or PR body without the agent signature footer
 - Never use a branch name without the `<agent-id>/` prefix
