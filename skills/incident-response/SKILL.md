@@ -268,6 +268,93 @@ After every incident (SEV-1 through SEV-3), document the following on the relate
 - [ ] <follow-up task> — owner: <agent/user>
 ```
 
+## Phase 5: Post-Incident Cleanup
+
+After the cluster is recovered, clean up the issue/PR lifecycle so the release process stays accurate.
+
+### 1. Reopen the original issue
+
+The PR merge auto-closed the issue, but the revert means the feature was NOT delivered. Reopen it:
+
+```bash
+gh issue reopen <issue-number> --repo holdennguyen/homelab
+gh issue comment <issue-number> --repo holdennguyen/homelab --body "$(cat <<'EOF'
+Reopening — PR #<pr-number> was merged but reverted due to <root-cause>.
+The feature is not delivered. See the post-incident report on PR #<pr-number>.
+Re-implementation will be tracked as per-service sub-issues.
+EOF
+)"
+```
+
+### 2. Label the reverted PR
+
+Create and apply a `status:reverted` label to the merged PR so release notes and milestone tracking reflect reality:
+
+```bash
+gh label create "status:reverted" --description "PR was merged but changes were reverted" \
+  --color "D93F0B" --repo holdennguyen/homelab 2>/dev/null
+gh pr edit <pr-number> --add-label "status:reverted" --repo holdennguyen/homelab
+```
+
+A PR with `status:reverted` is excluded from the effective changelog — it delivered no net change.
+
+### 3. Assign milestones
+
+- **Original issue**: assign to a future milestone for re-implementation (not the current one, since the work needs to be redone properly)
+- **Reverted PR**: leave in its original milestone (if any) — the `status:reverted` label clarifies it
+
+```bash
+gh issue edit <issue-number> --milestone "v<future-version>" --repo holdennguyen/homelab
+```
+
+### 4. Create per-service sub-issues for re-implementation
+
+The original failure often stems from applying a change to all services at once. Break the re-implementation into smaller, independently testable PRs:
+
+```bash
+for service in <service1> <service2> <service3>; do
+  gh issue create \
+    --title "<type>: <description> for ${service}" \
+    --body "$(cat <<EOF
+Part of the re-implementation of #<original-issue>.
+
+Original PR #<pr-number> was reverted due to <root-cause>.
+This issue covers only the ${service} service.
+
+**Pre-merge checklist (mandatory):**
+- [ ] Helm value key verified with \`helm show values\`
+- [ ] Container image compatibility confirmed
+- [ ] \`kubectl apply --dry-run=client\` passes
+- [ ] Tested in isolation before merging
+
+Parent: #<original-issue>
+EOF
+    )" \
+    --label "<labels>" \
+    --milestone "v<future-version>" \
+    --assignee holdennguyen \
+    --repo holdennguyen/homelab
+done
+```
+
+### 5. Release impact
+
+When a merge and its revert both land in the same milestone:
+
+- **Net effect is zero** — they cancel each other out
+- The `status:reverted` label signals to the release manager to exclude the PR from the changelog narrative
+- If the reverted PR was the only `type:feat` in the milestone, the version bump may drop from MINOR to PATCH
+- The release manager should review milestone PRs for `status:reverted` before cutting the release
+
+### Summary checklist
+
+- [ ] Original issue reopened with revert explanation
+- [ ] Reverted PR labeled `status:reverted`
+- [ ] Original issue assigned to future milestone
+- [ ] Per-service sub-issues created for re-implementation
+- [ ] Post-incident report posted on the reverted PR
+- [ ] Release manager notified of milestone impact
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
