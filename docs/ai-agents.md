@@ -169,8 +169,9 @@ sequenceDiagram
 3. **Create a branch** from main: `<agent-id>/<type>/<issue-number>-<short-description>` (prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`)
 4. **Make changes** to manifests, config, docs
 5. **Commit** with a message referencing the issue and agent: `<type>: <description> (#<issue-number>) [<agent-id>]`
-6. **Push** and **create a labeled PR** via `gh pr create` with the same labels — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
-7. **Report** the PR URL back to the orchestrator or user
+6. **Keep branch up to date** — before every push, run `git fetch origin main && git merge origin/main --no-edit` to incorporate any changes merged to `main` since the branch was created. Resolve conflicts if needed; never force-push.
+7. **Push** and **create a labeled PR** via `gh pr create` with the same labels — body ends with `Agent: <agent-id> | OpenClaw Homelab` footer
+8. **Report** the PR URL back to the orchestrator or user
 
 ### GitHub Labels
 

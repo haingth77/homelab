@@ -212,6 +212,28 @@ Example: `devops-sre/feat/42-redis-caching`
 - **Layer 0 (Terraform):** Requires manual `terraform apply` on the host after merge.
 - **Docker image changes:** Requires `./scripts/build-openclaw.sh` + `kubectl rollout restart` on the host.
 
+### Keeping your branch up to date
+
+Your feature branch MUST stay current with `main` throughout your work. Stale branches cause merge conflicts and block ArgoCD sync after merge.
+
+**Before every push**, pull latest main into your branch:
+
+```bash
+git fetch origin main
+git merge origin/main --no-edit
+```
+
+If the merge has conflicts:
+1. Do NOT force-push or reset
+2. Resolve conflicts in every affected file
+3. `git add <resolved-files> && git merge --continue`
+4. If conflicts are too complex, report to the orchestrator (or user) with the list of conflicting files
+
+**When to run this:**
+- Before your first commit on a new branch (right after `git checkout -b`)
+- Before every `git push`
+- When you discover main has been updated while your PR is open
+
 ### What NOT to do
 
 - Never push directly to `main`

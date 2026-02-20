@@ -139,6 +139,8 @@ sequenceDiagram
 
 The git workflow details are embedded in each agent's `AGENTS.md` personality and the `gitops` skill. Each agent sets its own git identity via `git config` in the cloned repo (e.g. `devops-sre[bot] <devops-sre@openclaw.homelab>`), so every commit is traceable to the specific agent. The `GITHUB_TOKEN` from Infisical powers `gh` CLI authentication.
 
+**Branch freshness:** Agents are required to keep their feature branch up to date with `main` by running `git fetch origin main && git merge origin/main --no-edit` before every push. This prevents stale branches and merge conflicts when the PR is merged.
+
 ### Agent Footprint
 
 Every action is traceable to the specific agent that performed it:
