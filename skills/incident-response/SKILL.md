@@ -346,13 +346,96 @@ When a merge and its revert both land in the same milestone:
 - If the reverted PR was the only `type:feat` in the milestone, the version bump may drop from MINOR to PATCH
 - The release manager should review milestone PRs for `status:reverted` before cutting the release
 
-### Summary checklist
+## Phase 6: Stale PR Review & Milestone Reassessment
+
+An incident often reveals systemic quality issues that affect sibling PRs created in the same batch. After the immediate cleanup, assess the broader milestone.
+
+### 1. Identify sibling PRs
+
+PRs created by the same agent, in the same time frame, or as part of the same task batch likely share the same quality risks:
+
+```bash
+# Find open PRs from the same agent
+gh pr list --repo holdennguyen/homelab --state open \
+  --label "agent:<agent-id>" --json number,title --jq '.[].title'
+
+# Find open PRs in the same milestone
+gh pr list --repo holdennguyen/homelab --state open \
+  --search "milestone:<version>" --json number,title --jq '.[].title'
+```
+
+### 2. Triage sibling PRs
+
+For each sibling PR, evaluate:
+
+| Question | If yes |
+|---|---|
+| Was it created in the same batch as the reverted PR? | High risk — likely same quality issues |
+| Has it been reviewed? | If not reviewed, close and rewrite |
+| Does it modify Helm `valuesObject`? | Verify keys with `helm show values` |
+| Does it make broad cross-service changes? | Break into per-service PRs |
+| Does it have a pre-merge validation checklist? | If missing, close and rewrite |
+
+**Decision matrix:**
+
+| PR state | Reviewed? | Action |
+|---|---|---|
+| Open, same batch | No | **Close** — rewrite with pre-merge validation |
+| Open, same batch | Yes, passed review | Re-review with incident learnings, merge if safe |
+| Open, different batch | No | Review normally, but apply heightened scrutiny |
+| Merged, not reverted | — | Spot-check for same class of issues |
+
+### 3. Reassess the milestone
+
+After closing stale PRs and moving issues, the milestone scope changes:
+
+```bash
+# Check milestone state
+gh api repos/holdennguyen/homelab/milestones --jq \
+  '.[] | select(.state=="open") | "\(.title): open=\(.open_issues), closed=\(.closed_issues)"'
+```
+
+**Milestone reassessment rules:**
+
+- **All planned features reverted or deferred** → rescope the milestone to what's already shipped (merged infrastructure, docs, tooling). Update the milestone description.
+- **Milestone has 0 open issues** → it's ready for release. Cut the release with what's there.
+- **Only `status:reverted` PRs remain as features** → the version bump drops (e.g., MINOR → PATCH if no net features).
+- **Unreviewed PRs from a failed batch** → close them, move their parent issues to the next milestone, create fresh per-service sub-issues.
+
+### 4. Update milestone description
+
+Reflect the new scope so anyone reading the milestone understands what changed and why:
+
+```bash
+gh api repos/holdennguyen/homelab/milestones/<number> --method PATCH \
+  -f description="<updated description explaining scope change and why>"
+```
+
+### 5. Assign orphaned merged PRs
+
+Merged PRs without a milestone create gaps in release tracking. Assign them to the current milestone:
+
+```bash
+# Find merged PRs with no milestone
+gh pr list --repo holdennguyen/homelab --state merged --json number,title,milestone \
+  --jq '.[] | select(.milestone == null) | "\(.number) | \(.title)"'
+
+# Assign each to the appropriate milestone
+gh pr edit <number> --milestone "v<version>" --repo holdennguyen/homelab
+```
+
+### Summary checklist (full post-incident)
 
 - [ ] Original issue reopened with revert explanation
 - [ ] Reverted PR labeled `status:reverted`
 - [ ] Original issue assigned to future milestone
 - [ ] Per-service sub-issues created for re-implementation
 - [ ] Post-incident report posted on the reverted PR
+- [ ] Sibling PRs triaged — unreviewed ones from same batch closed
+- [ ] Parent issues of closed sibling PRs moved to future milestone
+- [ ] Orphaned merged PRs assigned to milestones
+- [ ] Milestone description updated to reflect new scope
+- [ ] Release cut if milestone is ready (0 open issues)
 - [ ] Release manager notified of milestone impact
 
 ## Troubleshooting

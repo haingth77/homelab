@@ -270,6 +270,19 @@ When all issues in a milestone are closed:
 
 5. **Report** the release URL to the user
 
+### Milestone reassessment (after incidents)
+
+When an incident causes reverts or scope changes, reassess the milestone before releasing:
+
+1. **Triage sibling PRs** — close unreviewed PRs from the same batch as the reverted PR (they share quality risks)
+2. **Move deferred work** — parent issues of closed PRs go to the next milestone
+3. **Assign orphaned merged PRs** — any merged PR without a milestone must be assigned
+4. **Update milestone description** — explain the scope change and rationale
+5. **Reassess version bump** — exclude `status:reverted` PRs from the version calculation
+6. **Release what's shipped** — don't hold a milestone open for deferred work; cut the release with what's already merged
+
+See the `incident-response` skill (Phase 6) for the full procedure.
+
 ## Incident Response
 
 You are the **incident commander** for the homelab cluster. When a deployment causes service degradation, you own the response.
