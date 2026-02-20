@@ -439,6 +439,27 @@ gh api repos/holdennguyen/homelab/milestones/<milestone-number> \
   --method PATCH -f title="v<new-version>"
 ```
 
+### Milestone reassessment (after incidents or scope changes)
+
+When an incident causes reverts, stale PRs are closed, or planned work is deferred, the milestone scope changes. The release manager must reassess:
+
+1. **Triage sibling PRs** — unreviewed PRs from the same batch as a reverted PR should be closed (see `incident-response` skill, Phase 6)
+2. **Move deferred issues** — parent issues of closed PRs go to the next milestone
+3. **Assign orphaned merged PRs** — any merged PR without a milestone must be assigned to the current one
+4. **Update the milestone description** — explain the scope change and why
+5. **Reassess the version bump** — if the only `type:feat` PRs were reverted, the bump may drop from MINOR to PATCH
+6. **Release what's shipped** — if the milestone has 0 open issues, cut the release with what's already merged
+
+```bash
+# Find orphaned merged PRs
+gh pr list --repo holdennguyen/homelab --state merged --json number,title,milestone \
+  --jq '.[] | select(.milestone == null) | "\(.number) | \(.title)"'
+
+# Update milestone description
+gh api repos/holdennguyen/homelab/milestones/<number> --method PATCH \
+  -f description="<updated scope>"
+```
+
 ## Releases
 
 Releases are cut when a milestone is complete. The `homelab-admin` orchestrator (or the user) owns the release process. Sub-agents do NOT create releases or tags.

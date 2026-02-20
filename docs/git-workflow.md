@@ -390,6 +390,44 @@ Owned by `homelab-admin` or the user — sub-agents never create tags or release
 4. Create a git tag and GitHub Release: `gh release create "v<version>" --target main --generate-notes --latest`
 5. Close the milestone and create the next one
 
+### Milestone reassessment
+
+When incidents, reverts, or scope changes alter a milestone's planned work, the release manager must reassess before cutting the release.
+
+**When to reassess:**
+
+- A PR in the milestone was merged then reverted
+- Sibling PRs from the same batch were closed without merge
+- Planned features were deferred to a future milestone
+- Orphaned merged PRs (no milestone) are discovered
+
+**Procedure:**
+
+1. **Triage sibling PRs** — unreviewed PRs created in the same batch as a reverted PR share the same quality risks. Close them and rewrite with proper pre-merge validation.
+
+2. **Move deferred work** — parent issues of closed PRs go to the next milestone with fresh per-service sub-issues.
+
+3. **Assign orphaned merged PRs** — any merged PR without a milestone must be assigned:
+
+```bash
+gh pr list --repo holdennguyen/homelab --state merged --json number,title,milestone \
+  --jq '.[] | select(.milestone == null) | "\(.number) | \(.title)"'
+```
+
+4. **Update milestone description** — explain the scope change:
+
+```bash
+gh api repos/holdennguyen/homelab/milestones/<number> --method PATCH \
+  -f description="<updated scope and rationale>"
+```
+
+5. **Reassess version bump** — if the only `type:feat` PRs were reverted, the effective bump may change (e.g., MINOR → PATCH).
+
+6. **Release what's shipped** — if the milestone has 0 open issues, cut the release with what's already merged. Don't hold a milestone open waiting for deferred work.
+
+!!! tip "Release what you have, not what you planned"
+    A milestone that lost its flagship feature to a revert is still releasable if it contains other merged work (infrastructure, docs, tooling). Rescope the description, adjust the version if needed, and ship it. Deferred features go to the next milestone.
+
 ## What NOT to Do
 
 - Never push directly to `main`
