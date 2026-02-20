@@ -199,6 +199,7 @@ Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the
 | `GITEA_OAUTH_CLIENT_SECRET` | Generated when creating Authentik OIDC provider for Gitea |
 | `OPENCLAW_GATEWAY_TOKEN` | Random hex string (`openssl rand -hex 32`) |
 | `OPENROUTER_API_KEY` | OpenRouter API key from [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `GEMINI_API_KEY` | Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
 Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), grant it **Member** access to the `homelab` project, update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to update the credential. See [docs/bootstrap.md](docs/bootstrap.md) for the full step-by-step.
 

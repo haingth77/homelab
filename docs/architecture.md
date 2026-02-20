@@ -225,7 +225,8 @@ flowchart TD
     CSS -- "ExternalSecret" --> GiteaPod
     CSS -- "ExternalSecret" --> PGPod
     CSS -- "ExternalSecret" --> OpenClawPod
-    OpenClawPod -- "OpenRouter API" --> OpenRouterAPI["OpenRouter\nstepfun/step-3.5-flash:free"]
+    OpenClawPod -- "primary" --> OpenRouterAPI["OpenRouter\nstepfun/step-3.5-flash:free"]
+    OpenClawPod -. "fallback" .-> GeminiAPI["Google Gemini\ngemini-2.5-pro"]
     ArgoController -- "poll git" --> GitHub["GitHub\nholdennguyen/homelab"]
 ```
 

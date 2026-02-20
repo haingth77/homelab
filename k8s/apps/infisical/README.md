@@ -117,6 +117,7 @@ flowchart TD
                     s15["GITEA_OAUTH_CLIENT_SECRET"]
                     s16["OPENCLAW_GATEWAY_TOKEN"]
                     s17["OPENROUTER_API_KEY"]
+                    s17b["GEMINI_API_KEY"]
                     s18["GITHUB_TOKEN"]
                 end
             end
@@ -165,6 +166,7 @@ flowchart TD
 |---|---|---|---|
 | `OPENCLAW_GATEWAY_TOKEN` | OpenClaw ExternalSecret | Any hex string | `openssl rand -hex 32` |
 | `OPENROUTER_API_KEY` | OpenClaw ExternalSecret | Valid OpenRouter API key | From [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `GEMINI_API_KEY` | OpenClaw ExternalSecret | Valid Google Gemini API key | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | `GITHUB_TOKEN` | OpenClaw ExternalSecret | GitHub PAT with repo scope | Fine-grained PAT for `holdennguyen/homelab` |
 
 > **ArgoCD OIDC client secret** is managed via Terraform (`argocd_oidc_client_secret` in tfvars), not by ESO. It is injected into `argocd-secret` via the `set_sensitive` Helm value in `terraform/argocd.tf`.

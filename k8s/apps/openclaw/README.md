@@ -28,11 +28,12 @@ flowchart TD
     end
 
     subgraph infisical["Infisical (homelab / prod)"]
-        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGITHUB_TOKEN"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN"]
     end
 
     subgraph providers["AI Model Providers"]
-        OpenRouter["OpenRouter API\nstepfun/step-3.5-flash:free"]
+        OpenRouter["OpenRouter API\nstepfun/step-3.5-flash:free\n(primary)"]
+        Gemini["Google Gemini API\ngemini-2.5-pro\n(fallback)"]
     end
 
     Clients -- "WireGuard" --> TServe
@@ -45,7 +46,8 @@ flowchart TD
     CSS -- "Universal Auth" --> InfisicalSecrets
     InfisicalSecrets -- "creates" --> K8sSecret
     K8sSecret -- "env vars" --> Deploy
-    Deploy --> OpenRouter
+    Deploy -- "primary" --> OpenRouter
+    Deploy -. "fallback" .-> Gemini
 ```
 
 ## Directory Contents
@@ -194,7 +196,8 @@ Add the following secrets to Infisical under **homelab / prod**:
 | Infisical Key | How to Generate | Required |
 |---|---|---|
 | `OPENCLAW_GATEWAY_TOKEN` | `openssl rand -hex 32` | Yes |
-| `OPENROUTER_API_KEY` | From [openrouter.ai/keys](https://openrouter.ai/keys) | Yes (model provider) |
+| `OPENROUTER_API_KEY` | From [openrouter.ai/keys](https://openrouter.ai/keys) | Yes (primary model provider) |
+| `GEMINI_API_KEY` | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Yes (fallback model provider) |
 | `GITHUB_TOKEN` | GitHub PAT (Fine-grained) with repo scope for `holdennguyen/homelab` | Yes (for git workflow) |
 
 After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
@@ -233,7 +236,7 @@ To add a new API key (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `TELEGRAM_
 
 All agents use **OpenRouter** as the model provider. OpenRouter is a built-in provider in OpenClaw -- no custom `models.providers` config is needed, just the `OPENROUTER_API_KEY` environment variable.
 
-**Model strategy:** `openrouter/stepfun/step-3.5-flash:free` is the primary model for all agents, configured in `agents.defaults.model.primary`. OpenRouter provides access to models from Anthropic, OpenAI, Google, Mistral, and other providers through a single API key. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
+**Model strategy:** `openrouter/stepfun/step-3.5-flash:free` is the primary model (free tier via OpenRouter). `google/gemini-2.5-pro` is configured as the fallback -- when the primary model fails or hits rate limits, OpenClaw automatically falls through to Gemini. Both are configured in `agents.defaults.model` in the configmap.
 
 #### Switching models
 
@@ -421,7 +424,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 |---|---|---|---|
 | `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
 | `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
-| `agents.defaults.model` | `primary` | `openrouter/stepfun/step-3.5-flash:free` | All agents use OpenRouter as the model provider |
+| `agents.defaults.model` | `primary` / `fallbacks` | Step 3.5 Flash (OpenRouter) primary, Gemini 2.5 Pro fallback | Free primary model with Gemini as fallback |
 | `tools.agentToAgent` | `enabled` / `allow` | All 5 agents | Enables inter-agent communication |
 | `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
@@ -433,8 +436,9 @@ OpenClaw runs five agents with the orchestrator pattern: a default `homelab-admi
 
 ```mermaid
 flowchart TD
-    subgraph models["Model Provider"]
-        OpenRouterM["OpenRouter\nstepfun/step-3.5-flash:free"]
+    subgraph models["Model Providers"]
+        OpenRouterM["OpenRouter\nstepfun/step-3.5-flash:free\n(primary)"]
+        GeminiM["Google Gemini\ngemini-2.5-pro\n(fallback)"]
     end
 
     HA["homelab-admin\n(Orchestrator)"]
@@ -449,6 +453,7 @@ flowchart TD
     HA -- "sessions_spawn" --> QA
 
     HA & DS & SE & SA & QA --> OpenRouterM
+    OpenRouterM -. "fallback" .-> GeminiM
 
     subgraph skills["Skills (/skills)"]
         S1["homelab-admin"]
@@ -492,8 +497,9 @@ All agents inherit their model from `agents.defaults.model`:
 | Setting | Value |
 |---|---|
 | Primary | `openrouter/stepfun/step-3.5-flash:free` |
+| Fallback | `google/gemini-2.5-pro` |
 
-OpenRouter is a built-in provider in OpenClaw. Authentication is via `OPENROUTER_API_KEY` (synced from Infisical). No per-agent model override is set -- all agents inherit the default. To switch models, change `agents.defaults.model.primary` in the configmap.
+Both OpenRouter and Google Gemini are built-in providers in OpenClaw. Authentication is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` (both synced from Infisical). No per-agent model override is set -- all agents inherit the default. When the primary model fails, OpenClaw automatically falls through to Gemini.
 
 Agent configuration is in the `openclaw-config` ConfigMap (mounted at `/config/openclaw.json`). Each agent has its own AGENTS.md personality file in `agents/workspaces/<id>/AGENTS.md`, copied into the pod workspace on every restart by the `init-workspaces` init container.
 

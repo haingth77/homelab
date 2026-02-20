@@ -64,7 +64,8 @@ data:
         ],
         "defaults": {
           "model": {
-            "primary": "openrouter/stepfun/step-3.5-flash:free"
+            "primary": "openrouter/stepfun/step-3.5-flash:free",
+            "fallbacks": ["google/gemini-2.5-pro"]
           },
           "subagents": {
             "maxSpawnDepth": 2,

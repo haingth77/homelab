@@ -34,11 +34,13 @@ flowchart TD
         HA -->|"sessions_spawn"| QA
     end
 
-    subgraph models ["Model Provider"]
-        OpenRouterM["OpenRouter\nstepfun/step-3.5-flash:free"]
+    subgraph models ["Model Providers"]
+        OpenRouterM["OpenRouter\nstepfun/step-3.5-flash:free\n(primary)"]
+        GeminiM["Google Gemini\ngemini-2.5-pro\n(fallback)"]
     end
 
     openclaw --> OpenRouterM
+    OpenRouterM -.->|"fallback"| GeminiM
 
     Skills -->|"hostPath /skills"| openclaw
     AgentsMD -->|"hostPath → init container"| openclaw
@@ -99,8 +101,9 @@ All agents inherit their model from `agents.defaults.model` (no per-agent overri
 | Setting | Value |
 |---|---|
 | Primary | `openrouter/stepfun/step-3.5-flash:free` |
+| Fallback | `google/gemini-2.5-pro` |
 
-All agents use OpenRouter as the model provider (built-in, no custom config needed). Authentication is via `OPENROUTER_API_KEY` env var, synced from Infisical. To switch models, change `agents.defaults.model.primary` in the configmap to any `openrouter/<provider>/<model>` ref.
+The primary model is a free-tier model via OpenRouter. When it fails or hits rate limits, OpenClaw automatically falls through to Google Gemini 2.5 Pro. Both are built-in providers -- authentication is via `OPENROUTER_API_KEY` and `GEMINI_API_KEY` env vars, synced from Infisical.
 
 ### How the Orchestrator Works
 
