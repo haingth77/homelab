@@ -29,13 +29,11 @@ Infisical is the **single source of truth** for all secrets. No secret values li
 
 ## Security
 
-**Current limitation:** The `infisical-standalone` Helm chart does not expose configuration for pod-level `securityContext`. As a result, Infisical runs with the default user defined in the Docker image (likely `root`). This is a known limitation and prevents the cluster from enforcing a non-root policy on this component.
+Infisical runs as a non-root user by default. The Docker image sets `USER 1001` (non-root-user), so the container process runs as `uid=1001(non-root-user) gid=1001(nodejs)` without any Kubernetes `securityContext` override.
 
-To improve security, the Infisical container should run as a non-root user. Potential solutions:
-- File an upstream feature request to add `securityContext` values to the chart.
-- Fork the chart and add the necessary configuration.
+**Note:** The `infisical-standalone` Helm chart does not expose pod-level or container-level `securityContext` configuration. The non-root execution relies entirely on the image's `USER` directive. If a future image version changes this default, there is no Helm-level safeguard to enforce non-root.
 
-The `pod-security.kubernetes.io/enforce: restricted` label is **not** applied to the `infisical` namespace, allowing Infisical to run while other namespaces enforce the restricted profile.
+The `pod-security.kubernetes.io/enforce: restricted` label is **not** applied to the `infisical` namespace because the ingress-nginx controller sidecar requires capabilities not permitted under the restricted profile.
 
 ## How It Is Deployed
 

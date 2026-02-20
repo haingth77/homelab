@@ -193,11 +193,12 @@ env:
 
 ## Security
 
-The External Secrets Operator runs as a non-root user by default. The Helm chart configures the pod security context with:
+The External Secrets Operator runs as a non-root user by default. The Helm chart configures the container-level security context with:
 
 - `runAsUser: 1000`
 - `runAsNonRoot: true`
-- `fsGroup: 1000`
+- `readOnlyRootFilesystem: true`
+- `allowPrivilegeEscalation: false`
 
 This complies with the cluster's restricted Pod Security Standard. No additional configuration is required.
 
