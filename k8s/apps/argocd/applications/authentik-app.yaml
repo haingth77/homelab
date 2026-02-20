@@ -23,6 +23,11 @@ spec:
             secretName: authentik-secret
 
         global:
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            fsGroup: 1000
           envFrom:
             - secretRef:
                 name: authentik-secret
