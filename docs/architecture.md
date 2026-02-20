@@ -75,7 +75,7 @@ Applications are organized into three **AppProjects** that scope which repos, na
 |---|---|---|
 | `secrets` | Secret management infrastructure | `infisical`, `external-secrets`, `external-secrets-config` |
 | `data` | Databases and data stores | `postgresql` |
-| `apps` | User-facing applications | `gitea`, `monitoring`, `authentik`, `openclaw` |
+| `apps` | User-facing applications | `gitea`, `monitoring`, `authentik`, `openclaw`, `trivy-operator`, `namespace-security`, `networking-policies` |
 | `default` | Bootstrap only | `argocd-apps` (root) |
 
 ```mermaid
@@ -108,6 +108,9 @@ flowchart LR
             MonApp["monitoring"]
             AuthApp["authentik"]
             OCApp["openclaw"]
+            TrivyApp["trivy-operator"]
+            NSApp["namespace-security"]
+            NPApp["networking-policies"]
         end
     end
 
@@ -203,6 +206,7 @@ flowchart TD
     subgraph monNs["monitoring namespace"]
         GrafanaPod["Grafana\nNodePort :30090"]
         PromPod["Prometheus\n15d retention"]
+        TrivyPod["Trivy Operator\n(vuln scanning)"]
         GrafanaPod --> PromPod
     end
 
@@ -286,7 +290,10 @@ homelab/
 │       ├── gitea/                  # Gitea kustomize manifests + ExternalSecret
 │       ├── monitoring/             # Grafana ExternalSecret
 │       ├── openclaw/               # OpenClaw AI gateway manifests
-│       └── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
+│       ├── postgresql/             # PostgreSQL kustomize manifests + ExternalSecret
+│       ├── trivy-operator/         # Trivy vulnerability scanner (README only; deployed via Helm)
+│       ├── namespace-security/     # Pod Security Standard labels for namespaces
+│       └── networking-policies/    # Default-deny NetworkPolicies for all namespaces
 ├── docs/                           # MkDocs documentation site
 │   ├── architecture.md             # This file
 │   ├── bootstrap.md                # Day-1 setup walkthrough

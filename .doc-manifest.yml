@@ -15,17 +15,6 @@
 #   - When adding a new service, add its README entry here
 
 documents:
-  # ── Root ──
-  - doc: README.md
-    sources:
-      - k8s/apps/
-      - terraform/
-      - agents/
-      - skills/
-      - scripts/
-      - mkdocs.yml
-      - .github/workflows/
-
   # ── Service READMEs (single source of truth per service) ──
   - doc: k8s/apps/argocd/README.md
     sources:
@@ -84,20 +73,16 @@ documents:
 
   - doc: docs/networking.md
     sources:
-      - k8s/apps/
+      - k8s/apps/networking-policies/
 
   - doc: docs/ai-agents.md
     sources:
       - agents/
       - skills/
-      - .cursor/rules/
-      - scripts/doc-freshness.py
-      - .doc-manifest.yml
+      - .cursor/rules/openclaw.mdc
 
   - doc: docs/git-workflow.md
     sources:
       - .cursor/rules/homelab.mdc
       - .github/workflows/
       - skills/incident-response/
-      - scripts/doc-freshness.py
-      - .doc-manifest.yml

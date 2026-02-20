@@ -32,6 +32,10 @@ flowchart TD
         ArgoDir -- "creates" --> GiteaApp["Application: gitea"]
         ArgoDir -- "creates" --> MonApp["Application: monitoring"]
         ArgoDir -- "creates" --> AuthApp["Application: authentik"]
+        ArgoDir -- "creates" --> OCApp["Application: openclaw"]
+        ArgoDir -- "creates" --> TrivyApp["Application: trivy-operator"]
+        ArgoDir -- "creates" --> NSApp["Application: namespace-security"]
+        ArgoDir -- "creates" --> NPApp["Application: networking-policies"]
     end
 
     AppController -- "poll every ~3min" --> git
@@ -54,6 +58,9 @@ flowchart TD
 | `applications/authentik-app.yaml` | Authentik SSO Helm chart |
 | `applications/authentik-config-app.yaml` | Authentik ExternalSecret (authentik namespace) |
 | `applications/openclaw-app.yaml` | OpenClaw AI gateway deployment |
+| `applications/trivy-operator-app.yaml` | Trivy vulnerability scanner Helm chart (monitoring namespace) |
+| `applications/namespace-security-app.yaml` | Pod Security Standard labels for namespaces |
+| `applications/networking-policies-app.yaml` | Default-deny NetworkPolicies across all namespaces |
 
 > **Note:** The `infisical` Application CR is **not** in this directory. It is created by `terraform/argocd.tf` because its Helm values include sensitive PostgreSQL and Redis passwords that cannot be stored in git.
 
@@ -82,6 +89,9 @@ flowchart LR
         A5["monitoring"]
         A6["authentik"]
         A7["openclaw"]
+        A8["trivy-operator"]
+        A9["namespace-security"]
+        A10["networking-policies"]
     end
 
     Kustomize --> secretsProj
@@ -98,7 +108,8 @@ Sync waves control the order in which resources are applied. AppProjects must ex
 | -1 | AppProjects (`secrets`, `data`, `apps`) | Must exist before any Application references them |
 | 0 | `external-secrets` | Installs the ESO Helm chart + CRDs (`ExternalSecret`, `ClusterSecretStore`, etc.) |
 | 1 | `external-secrets-config` | Applies the `ClusterSecretStore` — requires CRDs from wave 0 to be present |
-| (default) | `postgresql`, `gitea`, `monitoring`, `authentik`, `openclaw` | No ordering requirements between them |
+| 2 | `trivy-operator` | Vulnerability scanner — after core apps are synced |
+| (default) | `postgresql`, `gitea`, `monitoring`, `authentik`, `openclaw`, `namespace-security`, `networking-policies` | No ordering requirements between them |
 
 ## ArgoCD Configuration
 
