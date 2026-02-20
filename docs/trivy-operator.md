@@ -1,0 +1,1 @@
+--8<-- "k8s/apps/trivy-operator/README.md"

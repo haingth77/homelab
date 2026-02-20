@@ -53,3 +53,4 @@ nav:
       - Infisical: infisical.md
       - Monitoring: monitoring.md
       - OpenClaw: openclaw.md
+      - Trivy Operator: trivy-operator.md
