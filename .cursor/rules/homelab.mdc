@@ -95,6 +95,17 @@ Before merging PRs that modify cluster resources:
 
 After every implementation, update the related documentation before considering the task complete. This is not optional.
 
+### Doc freshness tracking
+
+The repo uses `.doc-manifest.yml` to map every documentation file to its implementation sources. Before creating a PR, run:
+
+```bash
+python scripts/doc-freshness.py --check-pr    # which docs this branch should update
+python scripts/doc-freshness.py --stale       # full staleness report
+```
+
+The `doc-freshness` GitHub Actions workflow runs on every PR and will comment if mapped docs are missing updates. The manifest is the **source of truth** for doc-to-source relationships — when adding a new service or doc, add an entry to `.doc-manifest.yml`.
+
 ### Single source of truth: `k8s/apps/<service>/README.md`
 
 Every service directory under `k8s/apps/` **must** have a `README.md`. This README is the **single source of truth** for that service's documentation. The corresponding `docs/<service>.md` is always a thin MkDocs wrapper that includes the README:
@@ -141,9 +152,10 @@ Every `k8s/apps/<service>/README.md` should include these sections (adapt as nee
 1. Create `k8s/apps/<service>/README.md` following the README structure above
 2. Create `docs/<service>.md` as a thin `include-markdown` wrapper (see template above)
 3. Add `<service>.md` to the `nav` in `mkdocs.yml`
-4. Update the service map and repository layout in `docs/architecture.md`
-5. If the service has secrets, update `docs/secret-management.md` and `k8s/apps/infisical/README.md` inventory
-6. If the service has a Tailscale endpoint, update `docs/networking.md` and `docs/bootstrap.md` (Tailscale Serve commands)
+4. Add doc → source mapping to `.doc-manifest.yml`
+5. Update the service map and repository layout in `docs/architecture.md`
+6. If the service has secrets, update `docs/secret-management.md` and `k8s/apps/infisical/README.md` inventory
+7. If the service has a Tailscale endpoint, update `docs/networking.md` and `docs/bootstrap.md` (Tailscale Serve commands)
 
 ### Rules
 
