@@ -87,7 +87,7 @@ This ensures that the container processes do not have root privileges on the hos
 
 Note: OpenClaw uses a `hostPath` volume to inject agent workspace definitions from the host (`/Users/holden.nguyen/homelab/agents/workspaces`). This is an exception to the cluster's default-deny network policies and requires the `openclaw` namespace to be exempt from the `restricted` pod security profile (due to the use of `hostPath`).
 
-Additionally, the OpenClaw service account is scoped to its own namespace and granted only minimal permissions via a Role. The previous `cluster-admin` ClusterRoleBinding has been removed, limiting the blast radius if the service account token were compromised.
+The OpenClaw service account is scoped to its own namespace via a Role with minimal permissions: read-only access to pods, logs, secrets, configmaps, services, and PVCs, plus exec into pods for debugging. The previous `cluster-admin` ClusterRoleBinding has been removed, limiting the blast radius if the service account token were compromised.
 
 ## How It Fits in the Homelab
 
