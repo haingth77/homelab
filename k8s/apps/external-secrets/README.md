@@ -191,6 +191,17 @@ env:
 | `grafana-secret` | `monitoring` | `grafana-secret` | `admin-user`, `admin-password`, `oauth-client-id`, `oauth-client-secret` | Grafana admin login; Grafana OIDC via Authentik |
 | `openclaw-secret` | `openclaw` | `openclaw-secret` | `OPENCLAW_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GITHUB_TOKEN` | OpenClaw gateway env vars, agent git workflow |
 
+## Security
+
+The External Secrets Operator runs as a non-root user by default. The Helm chart configures the container-level security context with:
+
+- `runAsUser: 1000`
+- `runAsNonRoot: true`
+- `readOnlyRootFilesystem: true`
+- `allowPrivilegeEscalation: false`
+
+This complies with the cluster's restricted Pod Security Standard. No additional configuration is required.
+
 ## Operational Commands
 
 ```bash

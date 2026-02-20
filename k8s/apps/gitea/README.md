@@ -44,6 +44,18 @@ flowchart TD
 | `deployment.yaml` | Deployment with init container, env var overrides, and resource limits |
 | `service.yaml` | NodePort Service exposing HTTP (:30300) and SSH (:30022) |
 
+## Security
+
+Gitea is built on the s6-overlay init system, which requires root privileges during startup to initialize the container and manage service processes. Attempting to set a pod-level `runAsUser` (e.g., to a non-zero UID) causes an immediate `CrashLoopBackOff` because s6 cannot function correctly when the container starts as a non-root user.
+
+As a result, the Gitea pod runs as **root** (UID 0) inside the container. This is an exception to the cluster's non-root policy. The `gitea-system` namespace is excluded from the `restricted` pod security enforcement.
+
+If a non-root deployment is desired, it would require either:
+- Switching to a different init system that supports non-root operation.
+- Rebuilding the container image to drop root privileges after initialization (using container-level `securityContext` with `runAsNonRoot` but still starting as root and then dropping, which may still be considered root at pod level). This is not currently implemented.
+
+The Gitea service remains protected by other layers: it is only accessible inside the cluster via ClusterIP, and external access is proxied through Tailscale with TLS termination.
+
 ## Configuration Strategy
 
 Gitea configuration uses a three-layer approach:
