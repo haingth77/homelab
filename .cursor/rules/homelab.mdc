@@ -55,10 +55,28 @@ The `main` branch is **protected**. Never push directly to `main` — all change
    gh pr create --title "<type>: <description>" --body "<summary>"
    ```
 
+### Post-merge cleanup
+
+**Never delete a branch until the merge is confirmed.** Always verify before cleanup:
+
+```bash
+gh pr view <number> --json state,mergedAt --jq '"state: \(.state), merged: \(.mergedAt // "NOT MERGED")"'
+```
+
+Only proceed with deletion if the output shows `state: MERGED` and a merge timestamp. If the PR was closed without merging, do NOT delete the branch — the commits are only on that branch.
+
+```bash
+# Only after confirming MERGED:
+git checkout main && git pull origin main
+git branch -d <branch-name>
+git push origin --delete <branch-name>
+```
+
 ### Rules
 
 - **Never push to `main` directly** — branch protection will reject it
 - **Never force-push to `main`** — this is destructive and irreversible
+- **Never delete a branch without verifying the PR was merged** — use `gh pr view` to confirm
 - One PR per logical change — don't bundle unrelated changes
 - Include documentation updates in the same PR as the implementation
 - Never commit secrets, API keys, or credentials

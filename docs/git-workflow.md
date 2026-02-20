@@ -72,13 +72,20 @@ git push -u origin HEAD
 gh pr create --title "<type>: <description>" --body "<summary>"
 ```
 
-6. **After merge**, clean up:
+6. **After merge**, verify and clean up:
 
 ```bash
+# ALWAYS verify the PR was actually merged before deleting the branch
+gh pr view <number> --json state,mergedAt --jq '"state: \(.state), merged: \(.mergedAt // "NOT MERGED")"'
+
+# Only proceed if state is MERGED:
 git checkout main && git pull origin main
 git branch -d <branch-name>
 git push origin --delete <branch-name>
 ```
+
+!!! danger "Never delete a branch without confirming merge"
+    If a PR is closed without merging, the commits exist **only** on that branch. Deleting it loses the work and requires recovery from `git reflog`. Always check `gh pr view` first.
 
 ### Branch naming
 
@@ -432,6 +439,7 @@ gh api repos/holdennguyen/homelab/milestones/<number> --method PATCH \
 
 - Never push directly to `main`
 - Never force-push to `main`
+- Never delete a branch without verifying the PR was merged (`gh pr view <number> --json state,mergedAt`)
 - Never commit secrets, API keys, or credentials
 - Never bundle unrelated changes in one PR
 - Never assume a Helm value key exists — always verify with `helm show values`
@@ -453,9 +461,11 @@ git add . && git commit -m "feat: my feature"
 git fetch origin main && git merge origin/main --no-edit
 git push -u origin HEAD
 gh pr create --title "feat: my feature" --body "Summary of changes"
-# After merge:
+# After merge — verify BEFORE deleting:
+gh pr view <number> --json state --jq '.state'  # must say MERGED
 git checkout main && git pull origin main
 git branch -d feat/my-feature
+git push origin --delete feat/my-feature
 ```
 
 ### OpenClaw agent

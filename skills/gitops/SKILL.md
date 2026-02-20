@@ -218,6 +218,14 @@ Example: `devops-sre/feat/42-redis-caching`
 
 ### After merge
 
+**Before cleaning up, verify the PR was actually merged:**
+
+```bash
+gh pr view <number> --json state,mergedAt --jq '"state: \(.state), merged: \(.mergedAt // "NOT MERGED")"'
+```
+
+Only delete the branch if the state is `MERGED`. If the PR was closed without merging, the commits exist only on that branch — deleting it loses the work.
+
 - **Layer 1 (k8s manifests):** ArgoCD auto-syncs within ~3 minutes. Verify: `kubectl get applications -n argocd`
 - **Layer 0 (Terraform):** Requires manual `terraform apply` on the host after merge.
 - **Docker image changes:** Requires `./scripts/build-openclaw.sh` + `kubectl rollout restart` on the host.
@@ -316,6 +324,7 @@ git push origin main
 - Never use a branch name without the `<agent-id>/` prefix
 - Never assume a Helm value key exists — always verify with `helm show values` or `helm template`
 - Never apply `securityContext` changes without verifying image compatibility
+- Never delete a branch without verifying the PR was merged — use `gh pr view <number> --json state,mergedAt`
 
 ## App of Apps pattern
 
