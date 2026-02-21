@@ -11,7 +11,6 @@ flowchart TD
     subgraph terraform["Terraform (bootstrap, run once)"]
         TF["terraform apply"]
         TF --> HelmRelease["helm_release: argocd\nargo-cd v7.8.0\nNodePort :30080"]
-        TF --> RepoCred["K8s Secret: repo-homelab\nSSH key for GitHub"]
         TF --> RootApp["Application: argocd-apps\n→ k8s/apps/argocd/"]
         TF --> InfisicalApp["Application: infisical\n(Helm values embedded in Terraform)"]
     end
@@ -128,13 +127,13 @@ ArgoCD runs in **insecure mode** (`server.insecure = true`) — it serves plain 
 
 ## Repository Authentication
 
-ArgoCD authenticates to the private GitHub repository using an SSH deploy key. The key is stored in a Kubernetes Secret `repo-homelab` in the `argocd` namespace, created by Terraform. All Application CRs use the SSH URL format:
+The homelab repository is public on GitHub. ArgoCD clones it via unauthenticated HTTPS — no deploy keys, PATs, or credentials are needed. All Application CRs use the HTTPS URL format:
 
 ```
-repoURL: git@github.com:holdennguyen/homelab.git
+repoURL: https://github.com/holdennguyen/homelab.git
 ```
 
-The SSH key is stored in `terraform/terraform.tfvars` (gitignored) and injected by `terraform/argocd.tf`.
+This eliminates the risk of SSH private key leakage in the public repo's Terraform state or tfvars. If the repo ever goes private, a Fine-grained PAT can be added via the Infisical → ESO pipeline.
 
 ## Adding a New Application
 
@@ -183,7 +182,7 @@ metadata:
 spec:
   project: <project>                            # secrets | data | apps
   source:
-    repoURL: git@github.com:holdennguyen/homelab.git
+    repoURL: https://github.com/holdennguyen/homelab.git
     targetRevision: HEAD
     path: k8s/apps/my-service
   destination:
@@ -254,8 +253,7 @@ kubectl logs -n argocd deploy/argocd-application-controller --tail=50
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| App shows `OutOfSync` forever | ArgoCD can't clone repo | Check `repo-homelab` secret exists; verify SSH key is authorized on GitHub |
-| `authentication required` error | SSH key not authorized | Confirm public key is in GitHub → repo → Settings → Deploy keys |
+| App shows `OutOfSync` forever | ArgoCD can't clone repo | Verify the HTTPS URL is reachable: `git ls-remote https://github.com/holdennguyen/homelab.git` |
 | Application stuck in `Progressing` | Pod not ready | `kubectl describe pod -n <namespace>` for Events |
 | CRD not found during sync | Wrong sync wave order | Ensure `external-secrets` (wave 0) is healthy before `external-secrets-config` (wave 1) syncs |
 | Changes not deployed after push | Normal poll delay | Wait ~3min or force refresh via annotation |

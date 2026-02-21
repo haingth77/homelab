@@ -1,9 +1,3 @@
-variable "argocd_repo_ssh_private_key" {
-  description = "SSH private key for the ArgoCD deploy key (read-only access to the homelab repo)"
-  type        = string
-  sensitive   = true
-}
-
 variable "argocd_oidc_client_secret" {
   description = "OIDC client secret for ArgoCD's Authentik provider"
   type        = string
@@ -23,9 +17,9 @@ variable "argocd_version" {
 }
 
 variable "homelab_repo_url" {
-  description = "Git repository SSH URL for the homelab GitOps source"
+  description = "Git repository HTTPS URL for the homelab GitOps source"
   type        = string
-  default     = "git@github.com:holdennguyen/homelab.git"
+  default     = "https://github.com/holdennguyen/homelab.git"
 }
 
 # ── Infisical bootstrap secrets ───────────────────────────────────────────────
