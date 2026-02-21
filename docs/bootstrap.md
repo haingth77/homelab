@@ -41,7 +41,7 @@ flowchart TD
 ## Step 1: Clone the Repository
 
 ```bash
-git clone git@github.com:holdennguyen/homelab.git
+git clone https://github.com/holdennguyen/homelab.git
 cd homelab
 ```
 
@@ -63,29 +63,7 @@ openssl rand -hex 12
 openssl rand -hex 12
 ```
 
-## Step 3: Set Up SSH Deploy Key
-
-ArgoCD needs read-only access to the private GitHub repository. You can use your machine's existing SSH key if it is already authorized for the GitHub account:
-
-```bash
-# Check if an ed25519 key exists
-ls -la ~/.ssh/id_ed25519
-
-# If it exists, display the public key to verify it is in GitHub → Settings → SSH Keys
-cat ~/.ssh/id_ed25519.pub
-```
-
-Alternatively, create a dedicated deploy key with read-only access:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/homelab-argocd -N "" -C "argocd@homelab"
-
-# Add the public key to GitHub:
-# Repository → Settings → Deploy keys → Add deploy key (read-only)
-cat ~/.ssh/homelab-argocd.pub
-```
-
-## Step 4: Create `terraform/terraform.tfvars`
+## Step 3: Create `terraform/terraform.tfvars`
 
 Copy the example file:
 
@@ -96,9 +74,8 @@ cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 Then populate every value (the file is gitignored — it never gets committed):
 
 ```hcl
-kube_context     = "orbstack"
-argocd_version   = "7.8.0"
-homelab_repo_url = "git@github.com:holdennguyen/homelab.git"
+kube_context   = "orbstack"
+argocd_version = "7.8.0"
 
 # From Step 2
 infisical_encryption_key    = "<output of: openssl rand -hex 16>"
@@ -106,17 +83,10 @@ infisical_auth_secret       = "<output of: openssl rand -base64 32>"
 infisical_postgres_password = "<output of: openssl rand -hex 12>"
 infisical_redis_password    = "<output of: openssl rand -hex 12>"
 
-# From Infisical UI after first run (see Step 6)
+# From Infisical UI after first run (see Step 5)
 # Leave placeholder values for the first apply and update after Infisical starts
 infisical_machine_identity_client_id     = "placeholder-update-after-infisical-starts"
 infisical_machine_identity_client_secret = "placeholder-update-after-infisical-starts"
-
-# From Step 3
-argocd_repo_ssh_private_key = <<-EOT
------BEGIN OPENSSH PRIVATE KEY-----
-<paste full private key content here>
------END OPENSSH PRIVATE KEY-----
-EOT
 
 # ArgoCD OIDC client secret (create Authentik provider with client_id=argocd after bootstrap)
 argocd_oidc_client_secret = "<leave placeholder, set after Authentik is running>"
@@ -124,7 +94,7 @@ argocd_oidc_client_secret = "<leave placeholder, set after Authentik is running>
 
 > **Note on machine identity credentials:** On the first `terraform apply`, you can use placeholder values for `infisical_machine_identity_client_id` and `infisical_machine_identity_client_secret`. After Infisical is running and you have created a real Machine Identity (Step 6), re-run `terraform apply` with the real values.
 
-## Step 5: Bootstrap with Terraform
+## Step 4: Bootstrap with Terraform
 
 ```bash
 cd terraform
@@ -142,7 +112,7 @@ terraform apply
 Terraform creates the following in order:
 1. Namespaces: `argocd`, `infisical`, `external-secrets`
 2. ArgoCD Helm release (NodePort :30080/:30443)
-3. Bootstrap K8s Secrets: `infisical-secrets`, `infisical-helm-secrets`, `infisical-machine-identity`, `repo-homelab`
+3. Bootstrap K8s Secrets: `infisical-secrets`, `infisical-helm-secrets`, `infisical-machine-identity`
 4. ArgoCD `Application` CR for the root App of Apps (`argocd-apps`)
 5. ArgoCD `Application` CR for Infisical (with embedded Helm values)
 
@@ -162,7 +132,7 @@ Expected sequence:
 3. `external-secrets-config` app syncs (sync-wave 1) → ClusterSecretStore is created
 4. `postgresql`, `gitea`, `monitoring`, `authentik` sync → pods start (secrets not yet available)
 
-## Step 6: Configure Infisical
+## Step 5: Configure Infisical
 
 This step is done once in the Infisical web UI. Infisical cannot configure itself automatically.
 
@@ -261,7 +231,7 @@ kubectl annotate externalsecret postgresql-secret -n gitea-system force-sync=$(d
 kubectl annotate externalsecret gitea-secret -n gitea-system force-sync=$(date +%s) --overwrite
 ```
 
-## Step 7: Configure Tailscale Serve
+## Step 6: Configure Tailscale Serve
 
 These commands expose services to all devices on your tailnet with automatic TLS:
 
@@ -313,7 +283,7 @@ https://holdens-mac-mini.story-larch.ts.net:8447 (tailnet only)
 |-- / proxy http://localhost:30789
 ```
 
-## Step 8: Verify Everything is Healthy
+## Step 7: Verify Everything is Healthy
 
 ```bash
 # ArgoCD — all applications should be Synced + Healthy

@@ -13,7 +13,7 @@ Terraform manages Layer 0 only — the bootstrap layer that creates ArgoCD and i
 - ArgoCD Helm release and configuration
 - Root Application CR (`argocd-apps`) and Infisical Application CR
 - Bootstrap K8s Secrets (Infisical encryption key, auth secret, machine identity)
-- ArgoCD SSH deploy key for the private GitHub repo
+- ArgoCD root Application and Infisical Application CRs
 
 ## Rules
 
