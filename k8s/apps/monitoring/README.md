@@ -99,24 +99,43 @@ k8s/apps/monitoring/
 ├── kustomization.yaml
 ├── external-secret.yaml
 ├── dashboards/
-│   ├── dashboard-homelab-overview.yaml
-│   ├── dashboard-node-health.yaml
-│   ├── dashboard-postgresql.yaml
-│   ├── dashboard-network.yaml
-│   ├── dashboard-gitea.yaml
-│   ├── dashboard-authentik.yaml
-│   ├── dashboard-argocd.yaml
-│   └── dashboard-infisical.yaml
+│   ├── dashboard-homelab-overview.yaml    # 🔴 Critical - Main monitoring view
+│   ├── dashboard-node-health.yaml         # 🔴 Critical - Infrastructure health
+│   ├── dashboard-network.yaml             # 🟡 Important - Network monitoring
+│   ├── dashboard-argocd.yaml              # 🟡 Important - GitOps monitoring
+│   ├── dashboard-authentik.yaml           # 🟢 Service - Authentication
+│   └── dashboard-infisical.yaml           # 🟢 Service - Secrets management
 └── rules/
-    ├── recording-namespace.yaml
-    ├── recording-requests.yaml
-    ├── alerts-pods.yaml
-    ├── alerts-pvc.yaml
-    ├── alerts-nodes.yaml
-    ├── alerts-prometheus.yaml
-    ├── alerts-certificates.yaml
-    └── alerts-argocd.yaml
+    ├── recording-namespace.yaml           # Recording rules for fast queries
+    ├── recording-requests.yaml            # HTTP request rate recording
+    ├── alerts-pods.yaml                   # Pod crash/OOM alerts
+    ├── alerts-pvc.yaml                    # Storage usage alerts
+    ├── alerts-nodes.yaml                  # Node resource alerts
+    ├── alerts-prometheus.yaml             # Prometheus health alerts
+    ├── alerts-certificates.yaml           # Certificate expiry alerts
+    └── alerts-argocd.yaml                 # GitOps sync alerts
 ```
+
+### Dashboard Priority System
+
+**🔴 Critical Dashboards (Daily Monitoring):**
+- **Homelab Overview**: Single-pane view of cluster health, resource usage, and active alerts
+- **Node Health**: M4 Mac mini infrastructure monitoring (CPU, memory, disk, temperature)
+
+**🟡 Important Dashboards (Weekly/As-Needed):**
+- **Network**: Traffic patterns, policy rules, potential network issues
+- **ArgoCD**: GitOps sync status, deployment operations
+
+**🟢 Service Dashboards (On-Demand):**
+- **Authentik**: SSO service health, authentication flows, user metrics
+- **Infisical**: Secrets management service health, API usage
+
+### Monitoring Workflow
+
+1. **Daily Check**: Start with **Homelab Overview** for cluster status
+2. **Infrastructure**: Check **Node Health** for hardware issues
+3. **Investigate**: Use specific dashboards when alerts trigger or issues arise
+4. **Trends**: Review **Network** dashboard for traffic patterns and policy effectiveness
 
 ### Dashboard Provisioning
 
@@ -299,7 +318,43 @@ kubectl get application monitoring monitoring-config -n argocd
 |---|---|---|
 | Grafana login fails | SSO misconfigured | Check Authentik OIDC provider has `openid`, `email`, `profile` scope mappings; verify `api_url` has no trailing slash |
 | No metrics in dashboards | Prometheus targets down | Check `kubectl get pods -n monitoring`; verify targets via port-forward |
+| Dashboard panels show "No data" | Service decommissioned or metrics not available | Check if service is running: `kubectl get deployments -A`; verify metrics exist in Prometheus |
 | High memory usage | Retention too long or too many metrics | Reduce `retention` or add `retentionSize` limit in Prometheus spec |
 | PVC pending | No storage provisioner | Verify `local-path` provisioner is running in `kube-system` |
 | Grafana unreachable via Tailscale | Serve not configured | `tailscale serve --bg --https 8444 http://localhost:30090` |
 | Grafana 404 on `/userinfo/emails` | Authentik provider missing scope mappings | Assign `openid`, `email`, `profile` scope mappings to the Grafana provider |
+| Dashboard not appearing | ArgoCD sync issue | Check `kubectl get application monitoring-config -n argocd`; force refresh if needed |
+
+### Dashboard-Specific Issues
+
+**Homelab Overview:**
+- "No data" on pod counts: Ensure `kube-state-metrics` is running
+- Missing network metrics: Check `node-exporter` pod status
+
+**Node Health:**
+- Temperature data missing: May not be available on all systems
+- Disk I/O shows no data: Check node-exporter configuration
+
+**Network Dashboard:**
+- "Pod Network via Cilium" empty: Cilium metrics not enabled (expected)
+- Packet drops show no data: Normal if no network issues
+
+**Service Dashboards (Authentik/Infisical):**
+- Metrics missing: Check if service is running and exposing metrics
+- HTTP request data empty: Verify Prometheus is scraping service endpoints
+
+### Alert Testing
+
+To test alerting rules work correctly:
+
+```bash
+# Test PodCrashLooping alert
+kubectl run test-crash --image=busybox --restart=Always -- sh -c "sleep 10 && exit 1"
+
+# Check alerts in Prometheus
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+# Visit http://localhost:9090/alerts
+
+# Clean up test pod
+kubectl delete pod test-crash
+```
