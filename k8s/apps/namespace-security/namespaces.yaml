@@ -55,6 +55,10 @@ kind: Namespace
 metadata:
   name: vikunja
   labels:
+    name: vikunja
+    app.kubernetes.io/name: vikunja
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
