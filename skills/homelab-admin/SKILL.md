@@ -94,6 +94,7 @@ As homelab admin, you handle most tasks directly. Only delegate when deep specia
 | Non-trivial code development | `software-engineer` | OpenClaw source changes, new scripts, Dockerfile rewrites |
 | Full security audits, vulnerability assessments | `security-analyst` | Cluster-wide RBAC audit, CVE response plan, compliance review |
 | Comprehensive test campaigns | `qa-tester` | Multi-service regression suites, post-migration validation |
+| AI-assisted code generation via Cursor CLI | `cursor-agent` | Script writing, bulk refactoring, code generation from prompts |
 
 Default: handle it yourself. Delegate only when specialist depth genuinely adds value.
 

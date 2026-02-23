@@ -23,7 +23,7 @@ data:
             "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["homelab-admin", "gitops", "secret-management", "incident-response"],
             "subagents": {
-              "allowAgents": ["devops-sre", "software-engineer", "security-analyst", "qa-tester"]
+              "allowAgents": ["devops-sre", "software-engineer", "security-analyst", "qa-tester", "cursor-agent"]
             }
           },
           {
@@ -65,6 +65,16 @@ data:
             "subagents": {
               "allowAgents": []
             }
+          },
+          {
+            "id": "cursor-agent",
+            "name": "Cursor Agent",
+            "workspace": "/data/workspaces/cursor-agent",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
+            "skills": ["cursor-agent", "gitops"],
+            "subagents": {
+              "allowAgents": []
+            }
           }
         ],
         "defaults": {
@@ -99,7 +109,7 @@ data:
       "tools": {
         "agentToAgent": {
           "enabled": true,
-          "allow": ["homelab-admin", "devops-sre", "software-engineer", "security-analyst", "qa-tester"]
+          "allow": ["homelab-admin", "devops-sre", "software-engineer", "security-analyst", "qa-tester", "cursor-agent"]
         },
         "sessions": {
           "visibility": "all"

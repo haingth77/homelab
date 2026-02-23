@@ -28,10 +28,12 @@ flowchart TD
         SE["software-engineer"]
         SA["security-analyst"]
         QA["qa-tester"]
+        CA["cursor-agent"]
         HA -->|"sessions_spawn"| DS
         HA -->|"sessions_spawn"| SE
         HA -->|"sessions_spawn"| SA
         HA -->|"sessions_spawn"| QA
+        HA -->|"sessions_spawn"| CA
     end
 
     subgraph models ["Model Providers"]
@@ -86,7 +88,7 @@ autoAttach:
 
 ## OpenClaw Agents
 
-OpenClaw runs five agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
+OpenClaw runs six agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
 
 | Agent | Role | Workspace |
 |---|---|---|
@@ -95,6 +97,7 @@ OpenClaw runs five agents in an orchestrator pattern. The `homelab-admin` agent 
 | `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
 | `security-analyst` | Security audits, hardening | `/data/workspaces/security-analyst` |
 | `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
+| `cursor-agent` | AI-assisted code generation via Cursor CLI | `/data/workspaces/cursor-agent` |
 
 Every agent has an explicit object-form `model` with `{ primary, fallbacks }` in the configmap:
 
@@ -119,6 +122,7 @@ Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the s
 | Code changes, feature development, code review, testing | `software-engineer` | "Update the Dockerfile to add a new tool" |
 | Security audits, vulnerability assessment, hardening | `security-analyst` | "Audit the RBAC configuration" |
 | Deployment validation, regression testing, health checks | `qa-tester` | "Verify all services are healthy after the merge" |
+| AI-assisted code generation, Cursor CLI tasks | `cursor-agent` | "Generate a Python script that validates YAML files" |
 | Read-only checks, status queries, simple answers | `homelab-admin` (handles directly) | "What pods are running?" |
 
 When delegating, `homelab-admin` uses `sessions_spawn` and provides:
@@ -137,7 +141,7 @@ ALL agents enforce a mandatory git workflow for any change to the homelab reposi
 sequenceDiagram
     participant User
     participant HA as homelab-admin<br/>(Orchestrator)
-    participant SA as Sub-agent<br/>(devops-sre / software-engineer /<br/>security-analyst / qa-tester)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer /<br/>security-analyst / qa-tester / cursor-agent)
     participant GH as GitHub
     participant Argo as ArgoCD
 
@@ -179,7 +183,7 @@ Every issue and PR created by agents MUST be labeled. Labels serve as the tracki
 
 | Category | Labels | Rule |
 |---|---|---|
-| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst`, `agent:qa-tester` | Exactly one — who is working on this |
+| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst`, `agent:qa-tester`, `agent:cursor-agent` | Exactly one — who is working on this |
 | **Type** | `type:feat`, `type:fix`, `type:chore`, `type:docs`, `type:refactor`, `type:security` | Exactly one — what kind of change |
 | **Area** | `area:k8s`, `area:terraform`, `area:argocd`, `area:secrets`, `area:monitoring`, `area:networking`, `area:openclaw`, `area:auth` | One or more — what part of the homelab |
 | **Priority** | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | Exactly one — urgency |
@@ -305,6 +309,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `software-engineer` | `software-engineer`, `gitops` |
 | `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
 | `qa-tester` | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
+| `cursor-agent` | `cursor-agent`, `gitops` |
 
 All agents get the `gitops` skill for the mandatory git workflow. Cross-cutting skills (e.g. `secret-management`) are shared across agents that need them.
 
@@ -345,6 +350,7 @@ Skills provide domain-specific knowledge and commands to agents. They live in `s
 | `gitops` | ArgoCD App of Apps pattern, sync management, mandatory git workflow reference |
 | `incident-response` | Incident triage, rollback procedures, pre-merge validation, post-incident documentation |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
+| `cursor-agent` | Cursor CLI bridge: installation, automation, handoff protocol, code generation workflows |
 
 ### Skill Format
 

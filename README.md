@@ -120,8 +120,8 @@ homelab/
 │       └── vikunja/               # Vikunja todo list app with OIDC SSO
 ├── docs/                          # MkDocs documentation site
 ├── agents/                        # OpenClaw agent definitions
-│   └── workspaces/                # Per-agent AGENTS.md personality files (5 agents)
-├── skills/                        # OpenClaw homelab-specific skills (8 domains)
+│   └── workspaces/                # Per-agent AGENTS.md personality files (6 agents)
+├── skills/                        # OpenClaw homelab-specific skills (9 domains)
 ├── openclaw/                      # OpenClaw source (git submodule)
 └── scripts/                       # Helper scripts (image builds, etc.)
 ```

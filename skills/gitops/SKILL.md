@@ -48,6 +48,7 @@ Every issue and PR MUST be labeled. Use `--label` flags on `gh issue create` and
 | `agent:software-engineer` | software-engineer development agent |
 | `agent:security-analyst` | security-analyst security agent |
 | `agent:qa-tester` | qa-tester QA/testing agent |
+| `agent:cursor-agent` | cursor-agent code generation agent |
 
 **Type labels** — what kind of change (always exactly one):
 
@@ -103,6 +104,7 @@ Every action MUST be traceable to the specific agent that performed it. This is 
 | `software-engineer` | `software-engineer[bot]` | `software-engineer@openclaw.homelab` |
 | `security-analyst` | `security-analyst[bot]` | `security-analyst@openclaw.homelab` |
 | `qa-tester` | `qa-tester[bot]` | `qa-tester@openclaw.homelab` |
+| `cursor-agent` | `cursor-agent[bot]` | `cursor-agent@openclaw.homelab` |
 
 **Commit messages** — always include the agent tag at the end:
 

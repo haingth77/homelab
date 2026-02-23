@@ -137,7 +137,7 @@ All agents enforce a mandatory git workflow for any change to the homelab reposi
 sequenceDiagram
     participant User
     participant HA as homelab-admin<br/>(Orchestrator)
-    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst / qa-tester)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer / security-analyst / qa-tester / cursor-agent)
     participant GH as GitHub
     participant Argo as ArgoCD
 
@@ -645,7 +645,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 | `gateway` | `mode` | `"local"` | Enables full gateway functionality for the single-node deployment |
 | `gateway` | `trustedProxies` | RFC 1918 ranges | Treats internal K8s network traffic as local (fixes proxy header warnings) |
 | `agents.defaults.model` | `primary` / `fallbacks` | Step 3.5 Flash (OpenRouter) primary, Gemini 2.5 Pro fallback | Free primary model with Gemini as fallback |
-| `tools.agentToAgent` | `enabled` / `allow` | All 5 agents | Enables inter-agent communication |
+| `tools.agentToAgent` | `enabled` / `allow` | All 6 agents | Enables inter-agent communication |
 | `tools.sessions` | `visibility` | `"all"` | Allows the orchestrator to view sub-agent session history for debugging |
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
 | `agents.list[].subagents` | `allowAgents` | Per-agent list | Controls which agents each agent can spawn — only the orchestrator has non-empty lists |
@@ -655,7 +655,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 
 ## Multi-Agent & Skills Architecture
 
-OpenClaw runs five agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
+OpenClaw runs six agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
 
 ```mermaid
 flowchart TD
@@ -669,13 +669,15 @@ flowchart TD
     SE["software-engineer\n(Development)"]
     SA["security-analyst\n(Security)"]
     QA["qa-tester\n(QA/Testing)"]
+    CA["cursor-agent\n(Code Generation)"]
 
     HA -- "sessions_spawn" --> DS
     HA -- "sessions_spawn" --> SE
     HA -- "sessions_spawn" --> SA
     HA -- "sessions_spawn" --> QA
+    HA -- "sessions_spawn" --> CA
 
-    HA & DS & SE & SA & QA --> OpenRouterM
+    HA & DS & SE & SA & QA & CA --> OpenRouterM
     OpenRouterM -. "fallback" .-> GeminiM
 
     subgraph skills["Skills (/skills)"]
@@ -687,6 +689,7 @@ flowchart TD
         S6["secret-management"]
         S7["qa-tester"]
         S8["incident-response"]
+        S9["cursor-agent"]
     end
 
     HA --> S1 & S5 & S6 & S8
@@ -694,6 +697,7 @@ flowchart TD
     SE --> S3 & S5
     SA --> S4 & S5 & S6
     QA --> S7 & S5 & S6 & S8
+    CA --> S9 & S5
 ```
 
 Each agent has a `skills` allowlist in the configmap that restricts which skills it can see (omit = all skills; empty array = none):
@@ -705,6 +709,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `software-engineer` | `software-engineer`, `gitops` |
 | `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
 | `qa-tester` | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
+| `cursor-agent` | `cursor-agent`, `gitops` |
 
 ### Agents
 
@@ -715,6 +720,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
 | `security-analyst` | Security audits, vulnerability assessment, hardening | `/data/workspaces/security-analyst` |
 | `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
+| `cursor-agent` | AI-assisted code generation via Cursor CLI | `/data/workspaces/cursor-agent` |
 
 Every agent has an explicit object-form `model` in the configmap (see [Model config convention](#model-config-convention-important)):
 
@@ -743,6 +749,7 @@ Homelab-specific skills live in `skills/` at the repo root and are mounted into 
 | `gitops` | ArgoCD App of Apps pattern, sync management, mandatory git workflow, agent footprint conventions |
 | `incident-response` | Incident triage, rollback procedures, pre-merge validation, post-incident documentation |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
+| `cursor-agent` | Cursor CLI bridge: installation, automation, handoff protocol, code generation workflows |
 | `common/Documentation` | Standardized documentation generation |
 
 Skills follow the [AgentSkills](https://agentskills.io) format with OpenClaw-compatible `SKILL.md` frontmatter.
