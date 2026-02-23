@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vikunja
+  namespace: vikunja
+  labels:
+    app.kubernetes.io/name: vikunja
+    app.kubernetes.io/part-of: vikunja
+    app.kubernetes.io/managed-by: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vikunja
+      app.kubernetes.io/part-of: vikunja
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vikunja
+        app.kubernetes.io/part-of: vikunja
+    spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
+      containers:
+        - name: vikunja
+          image: vikunja/vikunja:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: VIKUNJA_DB_TYPE
+              value: postgres
+            - name: VIKUNJA_DB_HOST
+              value: postgresql.vikunja.svc.cluster.local
+            - name: VIKUNJA_DB_PORT
+              value: "5432"
+            - name: VIKUNJA_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-db-secret
+                  key: POSTGRES_USER
+            - name: VIKUNJA_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-db-secret
+                  key: VIKUNJA_DB_PASSWORD
+            - name: VIKUNJA_DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-db-secret
+                  key: POSTGRES_DB
+            - name: VIKUNJA_SERVICE_PORT
+              value: "3456"
+            - name: VIKUNJA_FRONTEND_URL
+              value: "http://vikunja.vikunja.svc.cluster.local"
+            - name: VIKUNJA_MAILER_ENABLED
+              value: "false"
+            - name: VIKUNJA_TIMEZONE
+              value: "UTC"
+          ports:
+            - containerPort: 3456
+              name: http
+          volumeMounts:
+            - name: files
+              mountPath: /app/files
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: files
+          persistentVolumeClaim:
+            claimName: vikunja-files
