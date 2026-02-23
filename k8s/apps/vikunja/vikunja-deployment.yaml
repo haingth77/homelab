@@ -54,8 +54,12 @@ spec:
                   key: POSTGRES_DB
             - name: VIKUNJA_SERVICE_PORT
               value: "3456"
+            - name: VIKUNJA_SERVICE_PUBLICURL
+              value: "http://vikunja.vikunja.svc.cluster.local"
             - name: VIKUNJA_FRONTEND_URL
               value: "http://vikunja.vikunja.svc.cluster.local"
+            - name: VIKUNJA_CACHE_DIR
+              value: "/tmp/.cache"
             - name: VIKUNJA_MAILER_ENABLED
               value: "false"
             - name: VIKUNJA_TIMEZONE
