@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-blueprints
+  namespace: authentik
+data:
+  bookmarks.yaml: |
+    version: 1
+    entries:
+      - model: authentik_core.application
+        id: app-infisical
+        state: present
+        identifiers:
+          slug: infisical
+        attrs:
+          name: Infisical
+          group: Infrastructure
+          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8445
+          meta_icon: https://avatars.githubusercontent.com/u/107880645?s=48&v=4
+          meta_description: Secret Management Platform
+          meta_publisher: Homelab
+      - model: authentik_core.application
+        id: app-mkdocs
+        state: present
+        identifiers:
+          slug: mkdocs
+        attrs:
+          name: Homelab Docs
+          group: Documentation
+          meta_launch_url: https://holdennguyen.github.io/homelab
+          meta_icon: https://avatars.githubusercontent.com/u/9692741?s=48&v=4
+          meta_description: Homelab Documentation
+          meta_publisher: Homelab
+      - model: authentik_core.application
+        id: app-trivy
+        state: present
+        identifiers:
+          slug: trivy
+        attrs:
+          name: Trivy Dashboard
+          group: Security
+          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8448
+          meta_icon: https://avatars.githubusercontent.com/u/12783832?s=48&v=4
+          meta_description: Trivy Operator Security Dashboard
+          meta_publisher: Homelab
+      - model: authentik_core.application
+        id: app-openclaw
+        state: present
+        identifiers:
+          slug: openclaw
+        attrs:
+          name: OpenClaw
+          group: AI
+          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8447
+          meta_icon: https://avatars.githubusercontent.com/u/252820863?s=48&v=4
+          meta_description: AI Agent Gateway Console
+          meta_publisher: Homelab

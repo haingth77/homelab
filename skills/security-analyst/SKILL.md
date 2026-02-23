@@ -31,7 +31,7 @@ Assess and harden the security posture of the homelab cluster, applications, and
 - Secrets managed through Infisical → ESO pipeline (never in git)
 - Network access restricted to Tailscale tailnet (private)
 - Bootstrap credentials managed by Terraform (gitignored tfvars)
-- ArgoCD SSH deploy key for GitHub repo access
+- ArgoCD clones repo via unauthenticated HTTPS (public repo, no credentials stored)
 - All external access is HTTPS via Tailscale Serve with Let's Encrypt certificates
 - OrbStack does not support NetworkPolicy enforcement (CNI limitation)
 
@@ -41,7 +41,7 @@ Apply STRIDE for every new service or significant configuration change:
 
 | Threat | Question to ask | Homelab mitigations |
 |---|---|---|
-| **Spoofing** | Can an attacker impersonate a user or service? | Tailscale identity (WireGuard), OPENCLAW_GATEWAY_TOKEN, Gitea auth |
+| **Spoofing** | Can an attacker impersonate a user or service? | Tailscale identity (WireGuard), OPENCLAW_GATEWAY_TOKEN, Authentik SSO |
 | **Tampering** | Can data in transit or at rest be modified? | WireGuard encryption (Tailscale), ArgoCD selfHeal reverts unauthorized changes |
 | **Repudiation** | Can actions be performed without accountability? | Agent footprint (git identity, labeled issues/PRs), pod audit logs |
 | **Information Disclosure** | Can secrets or data leak? | Secrets in Infisical (never git), ESO sync, Tailscale-only access |
@@ -135,8 +135,6 @@ Rule: NodePort services are accessible only on localhost. External access is exc
 | OpenClaw | `openclaw:latest` | Built locally from submodule + `Dockerfile.openclaw` | Yes (source in repo) |
 | ArgoCD | Official Helm chart images | `quay.io/argoproj/argocd` | Yes (upstream) |
 | ESO | Official Helm chart images | `ghcr.io/external-secrets/external-secrets` | Yes (upstream) |
-| Gitea | `gitea/gitea` | Docker Hub official | Yes (upstream) |
-| PostgreSQL | `postgres` | Docker Hub official | Yes (upstream) |
 | Prometheus/Grafana | kube-prometheus-stack images | Upstream Helm chart | Yes (upstream) |
 
 Flag any image that doesn't come from an official or verified source.
@@ -174,7 +172,7 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metada
 | Control | Status | Notes |
 |---|---|---|
 | GitHub branch protection | Enforced | PRs require review, no direct push to main |
-| SSH deploy key (read-only) | Active | ArgoCD uses SSH key for repo clone |
+| HTTPS repo access (no credentials) | Active | ArgoCD clones public repo via unauthenticated HTTPS |
 | Signed commits | Not enforced | Consider enabling GPG signing for agent commits |
 | Dependabot / Renovate | Not configured | Consider for Helm chart version updates |
 | Image scanning | Manual | Consider adding Trivy or Grype to CI |
@@ -188,12 +186,14 @@ Recommendations to improve supply chain posture:
 
 ### Security incident classification
 
-| Severity | Examples | Response |
+Uses the canonical scale from the `incident-response` skill, mapped to security contexts:
+
+| Severity | Security examples | Response |
 |---|---|---|
-| **Critical** | Secret exposed in git, unauthorized cluster access, data breach | Immediate: rotate all affected secrets, audit access logs, notify owner |
-| **High** | Privileged container found, RBAC misconfiguration, CVE in running image | Within 1h: apply fix, document finding, create hardening PR |
-| **Medium** | Missing security context, stale secrets, unnecessary permissions | Within 24h: create issue, apply fix in next maintenance window |
-| **Low** | Image not pinned to digest, missing readOnlyRootFilesystem | Best effort: document and fix when touching the service |
+| **SEV-1** | Secret exposed in git, unauthorized cluster access, data breach | Immediate: rotate all affected secrets, audit access logs, notify owner |
+| **SEV-2** | Privileged container found, RBAC misconfiguration, CVE in running image | Within 15 min: apply fix, document finding, create hardening PR |
+| **SEV-3** | Missing security context, stale secrets, unnecessary permissions | Within 1 hour: create issue, apply fix in next maintenance window |
+| **SEV-4** | Image not pinned to digest, missing readOnlyRootFilesystem | Best effort: document and fix when touching the service |
 
 ### Secret compromise response
 

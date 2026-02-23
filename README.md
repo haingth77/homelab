@@ -1,6 +1,6 @@
 # Homelab
 
-A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Authentik SSO, Gitea, PostgreSQL, Grafana + Prometheus, Infisical, and OpenClaw AI gateway -- orchestrated by Argo CD, with AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
+A GitOps-managed Kubernetes homelab running on OrbStack (Mac mini M4). Deploys self-hosted infrastructure services -- Authentik SSO, Grafana + Prometheus, Infisical, Trivy Operator, and OpenClaw AI gateway -- orchestrated by Argo CD, with security hardening (network policies, Pod Security Standards, non-root execution, vulnerability scanning) and AI agent skill definitions for multi-agent development workflows. All services are accessible from any device on the Tailscale network (iPhone, iPad, Mac).
 
 ## Architecture
 
@@ -20,6 +20,8 @@ flowchart TD
     subgraph orb["OrbStack Kubernetes Cluster"]
         subgraph argocdNs["argocd namespace"]
             ArgoCD["Argo CD\nHelm chart via Terraform\nNodePort :30080"]
+            NsPolicies["Namespace Security\nPod Security Standards"]
+            NetPolicies["Network Policies\nDefault-deny ingress/egress"]
         end
 
         subgraph infisicalNs["infisical namespace"]
@@ -31,13 +33,6 @@ flowchart TD
             CSS["ClusterSecretStore → Infisical"]
         end
 
-        subgraph giteaNs["gitea-system namespace"]
-            direction LR
-            GiteaPod["Gitea Pod"]
-            PostgresPod["PostgreSQL Pod"]
-            GiteaSvc["Gitea Service\nNodePort :30300"]
-        end
-
         subgraph authentikNs["authentik namespace"]
             AuthentikPod["Authentik SSO\nNodePort :30500"]
         end
@@ -45,10 +40,16 @@ flowchart TD
         subgraph monNs["monitoring namespace"]
             GrafanaPod["Grafana\nNodePort :30090"]
             PromPod["Prometheus"]
+            TrivyOp["Trivy Operator\nClientServer mode"]
+            TrivySrv["Trivy Server\nStatefulSet + PVC"]
         end
 
         subgraph openclawNs["openclaw namespace"]
             OpenClawPod["OpenClaw Gateway\nNodePort :30789"]
+        end
+
+        subgraph trivyDashNs["trivy-dashboard namespace"]
+            TrivyDash["Trivy Dashboard\nNodePort :30448"]
         end
     end
 
@@ -59,13 +60,15 @@ flowchart TD
     GitHub -- "poll & sync" --> ArgoCD
     ArgoCD -- "App of Apps" --> infisicalNs
     ArgoCD -- "App of Apps" --> esoNs
-    ArgoCD -- "App of Apps" --> giteaNs
     ArgoCD -- "App of Apps" --> authentikNs
     ArgoCD -- "App of Apps" --> monNs
     ArgoCD -- "App of Apps" --> openclawNs
+    ArgoCD -- "App of Apps" --> trivyDashNs
+    ArgoCD -- "manages" --> NsPolicies
+    ArgoCD -- "manages" --> NetPolicies
+    TrivyOp -->|watches pods| monNs
+    TrivyOp -->|queries| TrivySrv
     ESO --> CSS
-    CSS -- "ExternalSecret" --> GiteaPod
-    CSS -- "ExternalSecret" --> PostgresPod
     CSS -- "ExternalSecret" --> OpenClawPod
     CSS -- "ExternalSecret" --> AuthentikPod
     CSS -- "ExternalSecret" --> GrafanaPod
@@ -73,8 +76,8 @@ flowchart TD
     TServe -- ":8443 -> :30080" --> ArgoCD
     TServe -- ":8444 -> :30090" --> GrafanaPod
     TServe -- ":8445 -> :30445" --> InfisicalSvc
-    TServe -- ":8446 -> :30300" --> GiteaSvc
     TServe -- ":8447 -> :30789" --> OpenClawPod
+    TServe -- ":8448 -> :30448" --> TrivyDash
 ```
 
 ## Repository Structure
@@ -82,10 +85,12 @@ flowchart TD
 ```
 homelab/
 ├── README.md
+├── .doc-manifest.yml              # Doc freshness manifest (doc → source mappings)
 ├── mkdocs.yml                     # MkDocs Material site config
 ├── Dockerfile.openclaw            # Homelab overlay for OpenClaw image
-├── .gitignore                     # Excludes terraform.tfvars and .terraform/
+├── .gitignore                     # Excludes terraform state/tfvars, site/, .DS_Store
 ├── .github/workflows/docs.yml    # GitHub Pages deploy on push to main
+├── .github/workflows/doc-freshness.yml  # PR check for stale documentation
 ├── terraform/                     # Bootstrap layer (run once, not GitOps)
 │   ├── providers.tf               # kubernetes + helm provider config
 │   ├── argocd.tf                  # ArgoCD Helm release + root Application CR
@@ -99,13 +104,16 @@ homelab/
 │       ├── authentik/             # Authentik SSO ExternalSecret
 │       ├── external-secrets/      # ESO ClusterSecretStore config
 │       ├── infisical/             # (Helm chart managed by Terraform-created Application)
-│       ├── gitea/                 # Gitea kustomize manifests + ExternalSecret
 │       ├── monitoring/            # Grafana ExternalSecret
+│       ├── namespace-security/    # Pod Security Standard labels per namespace
+│       ├── networking-policies/   # Default-deny NetworkPolicy per namespace
 │       ├── openclaw/              # OpenClaw AI gateway kustomize manifests
-│       └── postgresql/            # PostgreSQL kustomize manifests + ExternalSecret
+│       ├── trivy-operator/        # Container image vulnerability scanning
+│       └── trivy-dashboard/       # Trivy Operator Dashboard web UI
 ├── docs/                          # MkDocs documentation site
-├── agents/workspaces/             # OpenClaw agent AGENTS.md personalities
-├── skills/                        # OpenClaw homelab-specific skills
+├── agents/                        # OpenClaw agent definitions
+│   └── workspaces/                # Per-agent AGENTS.md personality files (5 agents)
+├── skills/                        # OpenClaw homelab-specific skills (8 domains)
 ├── openclaw/                      # OpenClaw source (git submodule)
 └── scripts/                       # Helper scripts (image builds, etc.)
 ```
@@ -141,9 +149,11 @@ sequenceDiagram
 | Infisical | Helm chart via ArgoCD | `infisical` | `https://holdens-mac-mini.story-larch.ts.net:8445` |
 | External Secrets Operator | Helm chart via ArgoCD | `external-secrets` | internal only |
 | Grafana + Prometheus | Helm chart via ArgoCD | `monitoring` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
-| Gitea | Kustomize via ArgoCD | `gitea-system` | `https://holdens-mac-mini.story-larch.ts.net:8446` |
-| PostgreSQL | Kustomize via ArgoCD | `gitea-system` | ClusterIP `postgresql:5432` (internal only) |
+| Trivy Operator | Helm chart via ArgoCD | `monitoring` | internal only (CRs: `kubectl get vulnerabilityreports -A`) |
+| Trivy Dashboard | Kustomize via ArgoCD | `trivy-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8448` |
 | OpenClaw | Kustomize via ArgoCD | `openclaw` | `https://holdens-mac-mini.story-larch.ts.net:8447` |
+| Namespace Security | Kustomize via ArgoCD | `argocd` | cluster-wide Pod Security Standard labels |
+| Network Policies | Kustomize via ArgoCD | `argocd` | default-deny ingress/egress per namespace |
 
 ## Quick Start
 
@@ -182,25 +192,18 @@ Once ArgoCD deploys Infisical (check: `kubectl get pods -n infisical`), open the
 
 | Key | Description |
 |-----|-------------|
-| `POSTGRES_PASSWORD` | PostgreSQL password for Gitea |
-| `POSTGRES_USER` | `gitea` |
-| `POSTGRES_DB` | `gitea` |
-| `GITEA_DB_PASSWORD` | Same as `POSTGRES_PASSWORD` |
-| `GITEA_SECRET_KEY` | Random base64 string (`openssl rand -base64 32`) |
-| `GITEA_ADMIN_USERNAME` | Gitea admin username |
-| `GITEA_ADMIN_PASSWORD` | Gitea admin password (`openssl rand -hex 12`) |
-| `GITEA_ADMIN_EMAIL` | Gitea admin email |
 | `AUTHENTIK_SECRET_KEY` | Cookie signing key (`openssl rand -hex 32`) |
 | `AUTHENTIK_BOOTSTRAP_PASSWORD` | Authentik admin password |
 | `AUTHENTIK_BOOTSTRAP_TOKEN` | Authentik API token (`openssl rand -hex 32`) |
 | `AUTHENTIK_POSTGRES_PASSWORD` | Authentik PostgreSQL password (`openssl rand -hex 12`) |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (`openssl rand -hex 12`) |
 | `GRAFANA_OAUTH_CLIENT_SECRET` | Generated when creating Authentik OIDC provider for Grafana |
-| `GITEA_OAUTH_CLIENT_SECRET` | Generated when creating Authentik OIDC provider for Gitea |
 | `OPENCLAW_GATEWAY_TOKEN` | Random hex string (`openssl rand -hex 32`) |
+| `OPENROUTER_API_KEY` | OpenRouter API key from [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `GEMINI_API_KEY` | Google Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `GITHUB_TOKEN` | GitHub personal access token for OpenClaw agent git operations |
 
-Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), grant it **Member** access to the `homelab` project, update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to update the credential. See [docs/bootstrap.md](docs/bootstrap.md) for the full step-by-step.
+Then create a Machine Identity in Infisical (`Settings → Machine Identities → Universal Auth`), grant it **Member** access to the `homelab` project, update `terraform/terraform.tfvars` with the new `clientId` / `clientSecret`, and re-run `terraform apply` to update the credential. See [docs/getting-started/bootstrap.md](docs/getting-started/bootstrap.md) for the full step-by-step.
 
 ### 4. Expose Services via Tailscale
 
@@ -211,8 +214,8 @@ tailscale serve --bg http://localhost:30500                       # Authentik (S
 tailscale serve --bg --https 8443 http://localhost:30080          # ArgoCD
 tailscale serve --bg --https 8444 http://localhost:30090          # Grafana
 tailscale serve --bg --https 8445 http://localhost:30445          # Infisical
-tailscale serve --bg --https 8446 http://localhost:30300          # Gitea
 tailscale serve --bg --https 8447 http://localhost:30789          # OpenClaw
+tailscale serve --bg --https 8448 http://localhost:30448          # Trivy Dashboard
 
 tailscale serve status
 ```
@@ -223,8 +226,8 @@ Access URLs (any Tailscale device):
 - ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
 - Grafana: `https://holdens-mac-mini.story-larch.ts.net:8444`
 - Infisical: `https://holdens-mac-mini.story-larch.ts.net:8445`
-- Gitea: `https://holdens-mac-mini.story-larch.ts.net:8446`
 - OpenClaw: `https://holdens-mac-mini.story-larch.ts.net:8447`
+- Trivy Dashboard: `https://holdens-mac-mini.story-larch.ts.net:8448`
 
 ### Verify Deployment
 
@@ -243,24 +246,52 @@ kubectl get pods -A | grep -v Running | grep -v Completed
 
 | Document | What it covers |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | 3-layer design, technology choices, full service map, repository layout |
-| [docs/bootstrap.md](docs/bootstrap.md) | Step-by-step setup from scratch: prerequisites, secrets generation, Terraform, Infisical, Tailscale |
-| [docs/secret-management.md](docs/secret-management.md) | How secrets flow from Infisical → ESO → Kubernetes; adding secrets; rotating credentials |
-| [docs/networking.md](docs/networking.md) | Tailscale Serve + NodePort architecture, request path, TLS, full port map, troubleshooting |
-| [docs/authentik.md](docs/authentik.md) | Authentik SSO, OIDC provider setup, per-service integration |
-| [docs/monitoring.md](docs/monitoring.md) | Grafana + Prometheus stack, dashboards, SSO integration |
-| [docs/openclaw.md](docs/openclaw.md) | OpenClaw AI gateway deployment, image builds, multi-agent architecture |
-| [docs/ai-agents.md](docs/ai-agents.md) | Cursor rules + OpenClaw agents/skills, when to use which |
+| **Getting Started** | |
+| [docs/getting-started/architecture.md](docs/getting-started/architecture.md) | 3-layer design, technology choices, full service map, repository layout |
+| [docs/getting-started/bootstrap.md](docs/getting-started/bootstrap.md) | Step-by-step setup from scratch: prerequisites, secrets generation, Terraform, Infisical, Tailscale |
+| **Infrastructure** | |
+| [docs/infrastructure/security.md](docs/infrastructure/security.md) | Security posture, RBAC, network policies, Pod Security Standards, LLM agent permissions, hardening roadmap |
+| [docs/infrastructure/secret-management.md](docs/infrastructure/secret-management.md) | How secrets flow from Infisical → ESO → Kubernetes; adding secrets; rotating credentials |
+| [docs/infrastructure/networking.md](docs/infrastructure/networking.md) | Tailscale Serve + NodePort architecture, request path, TLS, full port map, troubleshooting |
+| **Services** | |
+| [docs/services/argocd.md](docs/services/argocd.md) | App of Apps pattern, sync waves, adding new applications |
+| [docs/services/authentik.md](docs/services/authentik.md) | Authentik SSO, OIDC provider setup, per-service integration |
+| [docs/services/external-secrets.md](docs/services/external-secrets.md) | ClusterSecretStore, ExternalSecret pattern, adding secrets for new services |
+| [docs/services/infisical.md](docs/services/infisical.md) | Infisical deployment, first-time setup, machine identity, bootstrap secrets |
+| [docs/services/monitoring.md](docs/services/monitoring.md) | Grafana + Prometheus monitoring stack, dashboards, SSO integration |
+| [docs/services/openclaw.md](docs/services/openclaw.md) | OpenClaw AI gateway deployment, image builds, multi-agent architecture |
+| [docs/services/trivy-operator.md](docs/services/trivy-operator.md) | Container image vulnerability scanning, ClientServer mode, Helm values |
+| [docs/services/trivy-dashboard.md](docs/services/trivy-dashboard.md) | Trivy Operator Dashboard web UI, vulnerability report viewer |
+| **Operations** | |
+| [docs/operations/git-workflow.md](docs/operations/git-workflow.md) | Branch conventions, PR requirements, post-merge cleanup for Cursor and OpenClaw |
+| [docs/operations/ai-agents.md](docs/operations/ai-agents.md) | Cursor rules + OpenClaw agents/skills, when to use which |
+| [docs/operations/nightly-shutdown.md](docs/operations/nightly-shutdown.md) | Automated nightly shutdown/startup using OrbStack CLI and macOS launchd |
+| **Implementation Details** | |
 | [terraform/README.md](terraform/README.md) | All Terraform variables, what resources are managed, day-2 operations |
-| [k8s/apps/argocd/README.md](k8s/apps/argocd/README.md) | App of Apps pattern, sync waves, adding new applications |
-| [k8s/apps/infisical/README.md](k8s/apps/infisical/README.md) | Infisical deployment, first-time setup, machine identity, bootstrap secrets |
-| [k8s/apps/external-secrets/README.md](k8s/apps/external-secrets/README.md) | ClusterSecretStore, ExternalSecret pattern, adding secrets for new services |
-| [k8s/apps/gitea/README.md](k8s/apps/gitea/README.md) | Config seeding via init container, env var overrides, ExternalSecret integration |
-| [k8s/apps/postgresql/README.md](k8s/apps/postgresql/README.md) | Database configuration, pg_hba.conf, PGDATA layout, password management |
+
+## Documentation Freshness Tracking
+
+Every documentation file is mapped to its implementation sources in [`.doc-manifest.yml`](.doc-manifest.yml). A Python script compares git history to detect when docs fall behind their sources.
+
+```bash
+python scripts/doc-freshness.py              # Full freshness report
+python scripts/doc-freshness.py --stale      # Only stale docs
+python scripts/doc-freshness.py --check-pr   # Check current branch for missing doc updates
+python scripts/doc-freshness.py --json       # JSON output (for automation)
+python scripts/doc-freshness.py --markdown   # Markdown table (for PR comments)
+```
+
+The [`doc-freshness`](.github/workflows/doc-freshness.yml) GitHub Actions workflow runs on every PR to `main`. If implementation sources changed but mapped docs were not updated, it posts a warning comment on the PR with a link to the details. The check is advisory — it does not block merge.
+
+When adding a new service or documentation file, add an entry to `.doc-manifest.yml` so the freshness system tracks it.
 
 ## Future Plans
 
-1. **CI/CD Pipelines** -- Gitea Actions or Tekton for build and test automation
-2. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
-3. **Security Hardening** -- Network policies, RBAC, TLS everywhere, image scanning
+1. **Product Development via OpenClaw** -- OpenClaw agents build products in separate GitHub repos; deployment manifests live in this repo and are synced by ArgoCD
+2. **CI/CD Pipelines** -- GitHub Actions for building product container images, ArgoCD Image Updater for automated deployments
+3. **Agent Expansion** -- Develop and integrate more AI agents for homelab automation
 4. **Logging** -- Loki for centralized log aggregation
+
+> **Completed in v1.1.0:** Security hardening — network policies (default-deny per namespace), Pod Security Standards enforcement, RBAC scope-down (OpenClaw cluster-admin removed), non-root execution for all services, and container image vulnerability scanning (Trivy Operator).
+
+> **Completed in v1.2.0:** Infrastructure optimization & observability — automated nightly shutdown/startup, monitoring dashboards and alerting rules as code, Gitea/PostgreSQL decommissioned (GitHub adopted), Authentik app portal with bookmarks, Trivy Dashboard, agent skills optimization.

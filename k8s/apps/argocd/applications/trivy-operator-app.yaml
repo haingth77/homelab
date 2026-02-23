@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trivy-operator
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: trivy-operator
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/component: security
+    app.kubernetes.io/managed-by: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: apps
+  source:
+    repoURL: https://aquasecurity.github.io/helm-charts
+    chart: trivy-operator
+    targetRevision: 0.32.0
+    helm:
+      valuesObject:
+        excludeNamespaces: "openclaw"
+        operator:
+          # Disable on-change vulnerability scanning; rely on scheduled VulnerabilityScanner CR
+          vulnerabilityScannerEnabled: false
+          scanJobsConcurrentLimit: 3
+          scanJobTTL: "30m"
+          scanJobsRetryDelay: "2m"
+          scannerReportTTL: "72h"
+          builtInTrivyServer: true
+        # Schedule for config audit (compliance) scans: daily at midnight
+        compliance:
+          cron: "0 0 * * *"
+        trivy:
+          mode: ClientServer
+          serverURL: "http://trivy-service.monitoring:4975"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100M
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          server:
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

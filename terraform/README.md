@@ -1,6 +1,6 @@
 # Terraform — Bootstrap Layer
 
-This directory contains the Terraform configuration that bootstraps the homelab cluster. It runs **once** to install ArgoCD and create all initial Kubernetes Secrets. After that, ArgoCD takes over GitOps management.
+This directory contains the Terraform configuration that bootstraps the homelab cluster. It runs **once** to install ArgoCD and create all initial Kubernetes Secrets. After that, ArgoCD takes over GitOps management — including security enforcement (non-root execution, Pod Security Standards, network policies), which is managed per-service in `k8s/apps/` rather than at the Terraform bootstrap layer.
 
 ## What Terraform Manages
 
@@ -16,7 +16,6 @@ flowchart TD
 
     subgraph argocd_resources["ArgoCD resources"]
         Helm["helm_release: argocd\nargo-cd chart v7.8.0\nNodePort :30080/:30443"]
-        RepoCred["kubernetes_secret: repo-homelab\nSSH deploy key for GitHub"]
         InfisicalApp["null_resource: infisical application CR\nHelm chart with embedded postgres/redis passwords"]
         RootApp["null_resource: argocd-apps root Application\nApp of Apps → k8s/apps/argocd/"]
     end
@@ -32,7 +31,6 @@ flowchart TD
     TF --> secrets
 
     Helm -->|depends_on| NS1
-    RepoCred -->|depends_on| Helm
     InfisicalApp -->|depends_on| Helm
     RootApp -->|depends_on| Helm
     S1 -->|depends_on| NS2
@@ -44,10 +42,10 @@ flowchart TD
 | File | Purpose |
 |---|---|
 | `providers.tf` | Configures `kubernetes`, `helm`, `local`, and `null` providers pointing to the `orbstack` kubeconfig context |
-| `argocd.tf` | ArgoCD Helm release, Infisical Application CR, root App of Apps, SSH repo credential |
+| `argocd.tf` | ArgoCD Helm release, Infisical Application CR, root App of Apps |
 | `bootstrap-secrets.tf` | Namespaces and the three bootstrap K8s Secrets |
 | `variables.tf` | All variable declarations with descriptions and types |
-| `outputs.tf` | Post-apply instructions and access URLs |
+| `outputs.tf` | Post-apply instructions, Tailscale Serve commands, and access URLs |
 | `terraform.tfvars` | **Gitignored.** Actual sensitive values — copy from `terraform.tfvars.example` |
 | `terraform.tfvars.example` | Template showing all required variables with placeholder values |
 | `.terraform.lock.hcl` | Provider version lock file — committed to git |
@@ -60,8 +58,7 @@ All variables are documented in `variables.tf`. The table below provides the com
 |---|---|---|---|---|
 | `kube_context` | string | no | `"orbstack"` | kubeconfig context name |
 | `argocd_version` | string | no | `"7.8.0"` | ArgoCD Helm chart version |
-| `homelab_repo_url` | string | no | `"git@github.com:holdennguyen/homelab.git"` | SSH URL of the homelab git repo |
-| `argocd_repo_ssh_private_key` | string | **yes** | — | SSH private key for ArgoCD to clone the homelab repo |
+| `homelab_repo_url` | string | no | `"https://github.com/holdennguyen/homelab.git"` | HTTPS URL of the homelab git repo |
 | `argocd_oidc_client_secret` | string | **yes** | — | OIDC client secret for ArgoCD's Authentik SSO provider |
 | `infisical_encryption_key` | string | **yes** | — | 32-char hex string; Infisical encrypts all stored secrets with this |
 | `infisical_auth_secret` | string | **yes** | — | Base64 string; Infisical JWT signing secret |
@@ -130,14 +127,6 @@ See [docs/bootstrap.md](../docs/bootstrap.md) for the complete step-by-step guid
    argocd_oidc_client_secret = "<new-secret>"
    ```
 3. `terraform apply` — Helm updates `argocd-secret` with the new OIDC secret. ArgoCD picks it up on the next login (no pod restart needed).
-
-### Rotate the ArgoCD SSH Deploy Key
-
-1. Generate a new key: `ssh-keygen -t ed25519 -f /tmp/argocd-new -N "" -C "argocd@homelab"`
-2. Add the public key to GitHub: **repo → Settings → Deploy keys → Add (read-only)**
-3. Update `terraform.tfvars` with the new private key content
-4. `terraform apply` — updates the `repo-homelab` K8s Secret
-5. Remove the old public key from GitHub
 
 ### Rotate Infisical Bootstrap Secrets
 

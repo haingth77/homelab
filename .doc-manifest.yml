@@ -1,0 +1,108 @@
+# Documentation Freshness Manifest
+#
+# Maps each documentation file to the implementation directories it covers.
+# Used by scripts/doc-freshness.py to detect stale documentation.
+#
+# How it works:
+#   For each entry, the script compares the last git commit that touched the doc
+#   vs the last commit that touched any file in its sources (excluding the doc itself).
+#   If the sources are newer, the doc is flagged as stale.
+#
+# Rules:
+#   - Every doc with real content should be listed here
+#   - Thin MkDocs wrappers (docs/<service>.md that just include-markdown a README) are excluded
+#   - sources are path prefixes matched against git file paths
+#   - When adding a new service, add its README entry here
+
+documents:
+  # ── Root README (high-level overview) ──
+  # Narrow sources: only structural files that indicate a new service or doc was added.
+  # Full review of the root README is enforced at release time (see homelab.mdc release checklist).
+  - doc: README.md
+    sources:
+      - k8s/apps/argocd/kustomization.yaml
+      - mkdocs.yml
+
+  # ── Service READMEs (single source of truth per service) ──
+  - doc: k8s/apps/argocd/README.md
+    sources:
+      - k8s/apps/argocd/
+
+  - doc: k8s/apps/authentik/README.md
+    sources:
+      - k8s/apps/authentik/
+
+  - doc: k8s/apps/external-secrets/README.md
+    sources:
+      - k8s/apps/external-secrets/
+
+  - doc: k8s/apps/infisical/README.md
+    sources:
+      - k8s/apps/infisical/
+
+  - doc: k8s/apps/monitoring/README.md
+    sources:
+      - k8s/apps/monitoring/
+
+  - doc: k8s/apps/openclaw/README.md
+    sources:
+      - k8s/apps/openclaw/
+
+  - doc: k8s/apps/trivy-operator/README.md
+    sources:
+      - k8s/apps/trivy-operator/
+
+  - doc: k8s/apps/trivy-dashboard/README.md
+    sources:
+      - k8s/apps/trivy-dashboard/
+
+  - doc: terraform/README.md
+    sources:
+      - terraform/
+
+  # ── Cross-cutting documentation (real content, not thin wrappers) ──
+  - doc: docs/getting-started/architecture.md
+    sources:
+      - k8s/apps/argocd/
+      - terraform/
+
+  - doc: docs/getting-started/bootstrap.md
+    sources:
+      - terraform/
+
+  - doc: docs/infrastructure/secret-management.md
+    sources:
+      - k8s/apps/external-secrets/
+      - k8s/apps/infisical/
+
+  - doc: docs/infrastructure/networking.md
+    sources:
+      - k8s/apps/networking-policies/
+
+  - doc: docs/infrastructure/security.md
+    sources:
+      - k8s/apps/openclaw/rbac.yaml
+      - k8s/apps/openclaw/deployment.yaml
+      - k8s/apps/openclaw/configmap.yaml
+      - k8s/apps/openclaw/external-secret.yaml
+      - k8s/apps/namespace-security/
+      - k8s/apps/networking-policies/
+
+  - doc: docs/operations/ai-agents.md
+    sources:
+      - agents/
+      - skills/
+      - .cursor/rules/openclaw.mdc
+
+  - doc: docs/operations/git-workflow.md
+    sources:
+      - .cursor/rules/homelab.mdc
+      - .github/workflows/
+      - skills/incident-response/
+
+  - doc: docs/operations/nightly-shutdown.md
+    sources:
+      - scripts/orb-stop.sh
+      - scripts/orb-start.sh
+      - scripts/com.homelab.orbstop.plist
+      - scripts/com.homelab.orbstart.plist

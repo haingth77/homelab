@@ -1,6 +1,6 @@
 # Authentik (SSO / Identity Provider)
 
-Authentik provides **Single Sign-On (SSO)** for the homelab via **OpenID Connect (OIDC)**. One login, one password for Grafana, ArgoCD, and Gitea.
+Authentik provides **Single Sign-On (SSO)** for the homelab via **OpenID Connect (OIDC)**. One login, one password for Grafana and ArgoCD.
 
 ## Access
 
@@ -24,13 +24,11 @@ flowchart TD
     subgraph services["Service OIDC integration"]
         Grafana["Grafana\nauth.generic_oauth"]
         ArgoCD["ArgoCD\noidc.config"]
-        Gitea["Gitea\nOpenID Connect source"]
     end
 
     User["User"] -- "login" --> Server
     Server -- "OIDC token" --> Grafana
     Server -- "OIDC token" --> ArgoCD
-    Server -- "OIDC token" --> Gitea
 ```
 
 ## Directory Contents
@@ -42,6 +40,17 @@ flowchart TD
 
 > **Note:** Authentik is deployed via the **Helm chart source** defined in `k8s/apps/argocd/applications/authentik-app.yaml`. This directory only contains the ExternalSecret that provides credentials to the Helm release. The `authentik-config` ArgoCD Application syncs this directory, while the `authentik` Application syncs the upstream Helm chart.
 
+## Security
+
+Authentik's server and worker pods run as non-root users. The pod-level securityContext is configured with:
+
+- `runAsUser: 1000`
+- `runAsGroup: 1000`
+- `runAsNonRoot: true`
+- `fsGroup: 1000`
+
+These settings ensure compliance with the cluster's restricted Pod Security Standard. The embedded PostgreSQL instance also runs as a non-root user (UID 999).
+
 ## OIDC Providers
 
 Each service has a dedicated OIDC provider in Authentik with its own client ID and secret:
@@ -50,7 +59,6 @@ Each service has a dedicated OIDC provider in Authentik with its own client ID a
 |---|---|---|---|
 | Grafana | `grafana` | `https://holdens-mac-mini.story-larch.ts.net:8444/login/generic_oauth` | Infisical: `GRAFANA_OAUTH_CLIENT_SECRET` |
 | ArgoCD | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443/auth/callback` | Terraform: `argocd_oidc_client_secret` |
-| Gitea | `gitea` | `https://holdens-mac-mini.story-larch.ts.net:8446/user/oauth2/authentik/callback` | Infisical: `GITEA_OAUTH_CLIENT_SECRET` |
 
 All providers use **RS256** signing (asymmetric keys). Scope mappings assigned: `openid`, `email`, `profile`.
 
@@ -62,9 +70,6 @@ All services enforce SSO-only access — local login forms are disabled:
 |---|---|
 | ArgoCD | `configs.cm.admin.enabled: false` — admin login disabled, RBAC default `role:admin` for all SSO users |
 | Grafana | `auth.disable_login_form: true`, `auto_login: true` — auto-redirects to Authentik |
-| Gitea | `ALLOW_ONLY_EXTERNAL_REGISTRATION: true` — new users can only register via OAuth |
-
-The Gitea local admin account is retained as a break-glass mechanism (credentials in Infisical).
 
 ## Configuration
 
@@ -93,8 +98,6 @@ Key settings:
 
 **ArgoCD** — configured in Terraform (`argocd.tf`) via `configs.cm.oidc.config`. Client secret stored in `argocd-secret` via Terraform `set_sensitive`. Requires `terraform apply` to update.
 
-**Gitea** — configured via `gitea admin auth add-oauth` in the PostSync init job (`admin-init-job.yaml`). Client secret from `gitea-secret` ExternalSecret.
-
 ## Networking
 
 | Layer | Value |
@@ -109,6 +112,41 @@ One-time Tailscale Serve setup:
 ```bash
 tailscale serve --bg http://localhost:30500
 ```
+
+## Application Inventory
+
+| Application | Integration | URL |
+|---|---|---|
+| Grafana | `auth.generic_oauth` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
+| ArgoCD | `oidc.config` | `https://holdens-mac-mini.story-larch.ts.net:8443` |
+| Infisical | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8445` |
+| OpenClaw | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8447` |
+| Trivy Dashboard | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8448` |
+| Homelab Docs | Bookmark | `https://holdennguyen.github.io/homelab` |
+
+## Adding a new Bookmark Application
+
+For services without native OIDC support, you can add them to the Authentik portal as a Bookmark Application using the Blueprint system.
+
+1. Edit `k8s/apps/authentik/blueprints-configmap.yaml`
+2. Add a new entry to the `entries` list under the `bookmarks.yaml` key:
+
+```yaml
+      - model: authentik_core.application
+        id: app-my-service
+        state: present
+        identifiers:
+          slug: my-service
+        attrs:
+          name: My Service
+          group: Development # Or whatever logical group makes sense
+          meta_launch_url: https://url-to-service
+          meta_icon: https://url-to-icon.png
+          meta_description: Short description of the service
+          meta_publisher: Homelab
+```
+
+3. Commit and push the changes. ArgoCD will sync the new ConfigMap, and Authentik will automatically discover and apply the Blueprint, making the bookmark appear in the portal.
 
 ## Adding a new OIDC-protected service
 
@@ -154,7 +192,6 @@ kubectl get application authentik authentik-config -n argocd
 | Authentik returns 502 | Server pod not ready | `kubectl get pods -n authentik` |
 | "Invalid client" error | Wrong client_id or secret | Verify the secret in Infisical matches what's in Authentik |
 | OIDC login button not showing | Config not applied | For ArgoCD: run `terraform apply`; for Grafana: wait for ArgoCD sync |
-| Gitea shows no OAuth option | Init job didn't run | Check job: `kubectl get jobs -n gitea-system` |
 | 403 `insufficient_scope` on userinfo | Provider missing scope mappings | Assign `openid`, `email`, `profile` scope mappings to the provider in Authentik |
 | ArgoCD `malformed jwt: unexpected algorithm HS256` | Provider using HS256 instead of RS256 | Update the provider's signing key to an RS256 keypair in Authentik |
 | ArgoCD shows no applications after SSO login | RBAC policy.default is empty | Set `configs.rbac.policy.default: role:admin` in Terraform |

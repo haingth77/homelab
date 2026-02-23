@@ -40,9 +40,17 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 
 Assign only skills relevant to the agent's role. Cross-cutting skills (e.g. `secret-management`) can be shared across agents that need them.
 
+## Model Config Convention
+
+Per-agent `model` MUST use the object form `{ "primary": "...", "fallbacks": ["..."] }` on EVERY agent in `agents.list[]`. Also keep `agents.defaults.model` in sync as the canonical source.
+
+**Why:** `agents.defaults.model` fallbacks do NOT propagate to per-agent resolution. A plain string `model` only sets primary and discards fallbacks. Only the object form ensures fallbacks appear in the UI and actually trigger on failure.
+
+When changing models: update `agents.defaults.model` AND every `agents.list[].model` entry.
+
 ## Adding a New Agent
 
-1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include a `skills` array with only the relevant skill names
+1. Add the agent entry to `k8s/apps/openclaw/configmap.yaml` under `agents.list` — include `model` as object form `{ "primary", "fallbacks" }` and a `skills` array with only the relevant skill names
 2. Create `agents/workspaces/<id>/AGENTS.md` with the agent personality
 3. Add the agent ID to the init container's `for` loop in `k8s/apps/openclaw/deployment.yaml`
 4. Add the agent ID to `tools.agentToAgent.allow` in the configmap

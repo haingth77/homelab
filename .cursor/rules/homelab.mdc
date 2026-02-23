@@ -16,76 +16,38 @@ This is a GitOps-driven homelab running on a Mac mini M4 with OrbStack Kubernete
 ## Core Rules
 
 - All persistent cluster changes go through git → ArgoCD sync. Never use `kubectl apply` for long-lived resources.
-- Never commit secrets, API keys, or credentials to git. Use the Infisical → ESO pipeline (see `skills/secret-management/SKILL.md`).
+- Never commit secrets, API keys, or credentials to git. Use the Infisical → ESO pipeline (`/secret-management` skill).
 - ArgoCD Application CRs must follow the project and label conventions in `k8s/apps/argocd/README.md` (projects: `secrets`, `data`, `apps`; labels: `app.kubernetes.io/{name,part-of,component,managed-by}`).
 - Prefer Kustomize over Helm for app workloads. Helm is only used for upstream charts (ESO, Infisical).
-- Documentation lives in `docs/` and is served by MkDocs. See the Documentation Rule below.
+- Before modifying Helm `valuesObject`, always verify keys with `helm show values` — charts silently ignore unknown keys. See `kubernetes.mdc` for the full rule.
+- After merging changes to `main`, verify ArgoCD sync and pod health before considering the task complete. If services degrade, use the `/incident-response` skill.
+- Documentation lives in `docs/` and is served by MkDocs. Use the `/documentation` skill for the update matrix and conventions.
 
-## Documentation Rule (mandatory)
+## Git Workflow
 
-After every implementation, update the related documentation before considering the task complete. This is not optional.
-
-### Single source of truth: `k8s/apps/<service>/README.md`
-
-Every service directory under `k8s/apps/` **must** have a `README.md`. This README is the **single source of truth** for that service's documentation. The corresponding `docs/<service>.md` is always a thin MkDocs wrapper that includes the README:
-
-```markdown
----
-title: <Service Name>
----
-
-{%
-   include-markdown "../k8s/apps/<service>/README.md"
-%}
-```
-
-**Never write documentation directly in `docs/<service>.md`** for services that have a `k8s/apps/<service>/` directory. Always edit the README instead.
-
-### README structure
-
-Every `k8s/apps/<service>/README.md` should include these sections (adapt as needed):
-
-1. **Title + one-line description** — what the service does
-2. **Architecture** — mermaid diagram showing the service's components and connections
-3. **Directory Contents** — table listing every file in the directory and its purpose
-4. **Configuration** — key settings, Helm values, or Kustomize details
-5. **Secrets in Infisical** — table of secret keys the service consumes (if any)
-6. **Networking** — table with container port, NodePort, Tailscale port, and access URL
-7. **Operational Commands** — common kubectl commands for the service
-8. **Troubleshooting** — table of symptom / cause / fix
-
-### What to update
-
-| Change area | Docs to update |
-|---|---|
-| `k8s/apps/<service>/` manifests | `k8s/apps/<service>/README.md` (the single source of truth) |
-| `k8s/apps/argocd/` (projects, applications) | `k8s/apps/argocd/README.md`, `docs/architecture.md` (Layer 1 diagram / service map) |
-| `terraform/` | `docs/bootstrap.md`, `docs/architecture.md` (Layer 0 section) |
-| `skills/` or `agents/` or `k8s/apps/openclaw/` | `k8s/apps/openclaw/README.md`, `docs/ai-agents.md` |
-| Secrets pipeline (ExternalSecret, Infisical) | `docs/secret-management.md` |
-| Networking (Tailscale, services, ports) | `docs/networking.md` |
-| New service added | See "Adding a new service" checklist below |
-
-### Adding a new service (documentation checklist)
-
-1. Create `k8s/apps/<service>/README.md` following the README structure above
-2. Create `docs/<service>.md` as a thin `include-markdown` wrapper (see template above)
-3. Add `<service>.md` to the `nav` in `mkdocs.yml`
-4. Update the service map and repository layout in `docs/architecture.md`
-5. If the service has secrets, update `docs/secret-management.md` and `k8s/apps/infisical/README.md` inventory
-6. If the service has a Tailscale endpoint, update `docs/networking.md` and `docs/bootstrap.md` (Tailscale Serve commands)
-
-### Rules
-
-- Keep docs concise — document the *what* and *why*, not step-by-step kubectl commands.
-- Never remove documentation for existing services without explicit instruction.
-- **Always include doc changes in the same commit as the implementation** (or as a follow-up commit in the same push). Pushing to `main` triggers the GitHub Pages deploy workflow (`.github/workflows/docs.yml`), so docs go live automatically — but only if they are committed and pushed.
+The `main` branch is **protected**. Never push directly to `main` — all changes require a feature branch and a pull request. Use the `/git-workflow` skill for the full branch workflow, PR creation, and post-merge cleanup procedures. Use `/address-issue` to execute the full issue-to-PR workflow.
 
 ## Key Paths
 
 - `terraform/` — Layer 0 bootstrap (ArgoCD, credentials)
 - `k8s/apps/` — Layer 1 GitOps manifests (one directory per service)
 - `k8s/apps/argocd/` — App of Apps: AppProjects + Application CRs
-- `skills/` — OpenClaw skills (also useful reference for Cursor)
+- `skills/` — OpenClaw skills (mounted into pod at `/skills`)
 - `agents/workspaces/` — OpenClaw agent AGENTS.md personalities
+- `.cursor/skills/` — Cursor-local skills (git-workflow, documentation, release-management, secret-management, incident-response)
+- `.cursor/agents/` — Cursor subagents (verifier)
+- `.cursor/commands/` — Cursor commands (address-issue, pre-merge-check)
 - `docs/` — MkDocs documentation site
+
+## Available Skills and Commands
+
+| Invoke | Purpose |
+|---|---|
+| `/git-workflow` | Branch workflow, PR creation, post-merge cleanup |
+| `/documentation` | Doc update matrix, README structure, new service checklist |
+| `/release-management` | Release checklist, versioning, milestone lifecycle |
+| `/secret-management` | Infisical → ESO pipeline, add/rotate secrets |
+| `/incident-response` | Triage, rollback, ArgoCD recovery, post-incident docs |
+| `/address-issue` | Full issue-to-PR workflow (command) |
+| `/pre-merge-check` | Validate manifests, Helm keys, docs before merge (command) |
+| `/verifier` | Post-deploy health verification (subagent) |

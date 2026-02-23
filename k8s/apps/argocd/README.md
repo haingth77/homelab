@@ -11,7 +11,6 @@ flowchart TD
     subgraph terraform["Terraform (bootstrap, run once)"]
         TF["terraform apply"]
         TF --> HelmRelease["helm_release: argocd\nargo-cd v7.8.0\nNodePort :30080"]
-        TF --> RepoCred["K8s Secret: repo-homelab\nSSH key for GitHub"]
         TF --> RootApp["Application: argocd-apps\n→ k8s/apps/argocd/"]
         TF --> InfisicalApp["Application: infisical\n(Helm values embedded in Terraform)"]
     end
@@ -28,10 +27,14 @@ flowchart TD
         RootApp -- "watches" --> ArgoDir
         ArgoDir -- "creates" --> ESOApp["Application: external-secrets"]
         ArgoDir -- "creates" --> ESCApp["Application: external-secrets-config"]
-        ArgoDir -- "creates" --> PGApp["Application: postgresql"]
-        ArgoDir -- "creates" --> GiteaApp["Application: gitea"]
         ArgoDir -- "creates" --> MonApp["Application: monitoring"]
         ArgoDir -- "creates" --> AuthApp["Application: authentik"]
+        ArgoDir -- "creates" --> OCApp["Application: openclaw"]
+        ArgoDir -- "creates" --> TrivyApp["Application: trivy-operator"]
+        ArgoDir -- "creates" --> TrivyScannerApp["Application: trivy-operator-vulnerability-scanner"]
+        ArgoDir -- "creates" --> TrivyDashApp["Application: trivy-dashboard"]
+        ArgoDir -- "creates" --> NSApp["Application: namespace-security"]
+        ArgoDir -- "creates" --> NPApp["Application: networking-policies"]
     end
 
     AppController -- "poll every ~3min" --> git
@@ -47,13 +50,16 @@ flowchart TD
 | `projects/apps.yaml` | AppProject for user-facing applications |
 | `applications/external-secrets-app.yaml` | ESO Helm chart (sync-wave 0 — installs CRDs first) |
 | `applications/external-secrets-config-app.yaml` | ClusterSecretStore (sync-wave 1 — after ESO CRDs) |
-| `applications/postgresql-app.yaml` | PostgreSQL deployment in `gitea-system` namespace |
-| `applications/gitea-app.yaml` | Gitea deployment in `gitea-system` namespace |
 | `applications/monitoring-app.yaml` | kube-prometheus-stack Helm chart (Grafana + Prometheus) |
 | `applications/monitoring-config-app.yaml` | Grafana ExternalSecret (monitoring namespace) |
 | `applications/authentik-app.yaml` | Authentik SSO Helm chart |
 | `applications/authentik-config-app.yaml` | Authentik ExternalSecret (authentik namespace) |
 | `applications/openclaw-app.yaml` | OpenClaw AI gateway deployment |
+| `applications/trivy-operator-app.yaml` | Trivy vulnerability scanner Helm chart (monitoring namespace, ClientServer mode) |
+| `applications/trivy-dashboard-app.yaml` | Trivy Operator Dashboard web UI (trivy-dashboard namespace) |
+| `applications/trivy-operator-vulnerability-scanner-app.yaml` | Trivy VulnerabilityScanner CR for scheduled daily scans |
+| `applications/namespace-security-app.yaml` | Pod Security Standard labels for namespaces |
+| `applications/networking-policies-app.yaml` | Default-deny NetworkPolicies across all namespaces |
 
 > **Note:** The `infisical` Application CR is **not** in this directory. It is created by `terraform/argocd.tf` because its Helm values include sensitive PostgreSQL and Redis passwords that cannot be stored in git.
 
@@ -78,10 +84,13 @@ flowchart LR
     end
 
     subgraph appsProj["apps project"]
-        A4["gitea"]
         A5["monitoring"]
         A6["authentik"]
         A7["openclaw"]
+        A8["trivy-operator"]
+        A11["trivy-dashboard"]
+        A9["namespace-security"]
+        A10["networking-policies"]
     end
 
     Kustomize --> secretsProj
@@ -98,7 +107,8 @@ Sync waves control the order in which resources are applied. AppProjects must ex
 | -1 | AppProjects (`secrets`, `data`, `apps`) | Must exist before any Application references them |
 | 0 | `external-secrets` | Installs the ESO Helm chart + CRDs (`ExternalSecret`, `ClusterSecretStore`, etc.) |
 | 1 | `external-secrets-config` | Applies the `ClusterSecretStore` — requires CRDs from wave 0 to be present |
-| (default) | `postgresql`, `gitea`, `monitoring`, `authentik`, `openclaw` | No ordering requirements between them |
+| 2 | `trivy-operator` | Vulnerability scanner — after core apps are synced |
+| (default) | `monitoring`, `authentik`, `openclaw`, `namespace-security`, `networking-policies` | No ordering requirements between them |
 
 ## ArgoCD Configuration
 
@@ -117,13 +127,13 @@ ArgoCD runs in **insecure mode** (`server.insecure = true`) — it serves plain 
 
 ## Repository Authentication
 
-ArgoCD authenticates to the private GitHub repository using an SSH deploy key. The key is stored in a Kubernetes Secret `repo-homelab` in the `argocd` namespace, created by Terraform. All Application CRs use the SSH URL format:
+The homelab repository is public on GitHub. ArgoCD clones it via unauthenticated HTTPS — no deploy keys, PATs, or credentials are needed. All Application CRs use the HTTPS URL format:
 
 ```
-repoURL: git@github.com:holdennguyen/homelab.git
+repoURL: https://github.com/holdennguyen/homelab.git
 ```
 
-The SSH key is stored in `terraform/terraform.tfvars` (gitignored) and injected by `terraform/argocd.tf`.
+This eliminates the risk of SSH private key leakage in the public repo's Terraform state or tfvars. If the repo ever goes private, a Fine-grained PAT can be added via the Infisical → ESO pipeline.
 
 ## Adding a New Application
 
@@ -172,7 +182,7 @@ metadata:
 spec:
   project: <project>                            # secrets | data | apps
   source:
-    repoURL: git@github.com:holdennguyen/homelab.git
+    repoURL: https://github.com/holdennguyen/homelab.git
     targetRevision: HEAD
     path: k8s/apps/my-service
   destination:
@@ -229,7 +239,7 @@ kubectl get applications -n argocd
 kubectl get pods -n argocd
 
 # Force an immediate sync on a specific application
-kubectl patch application gitea -n argocd \
+kubectl patch application openclaw -n argocd \
   --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
 
 # View ArgoCD server logs
@@ -243,8 +253,7 @@ kubectl logs -n argocd deploy/argocd-application-controller --tail=50
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| App shows `OutOfSync` forever | ArgoCD can't clone repo | Check `repo-homelab` secret exists; verify SSH key is authorized on GitHub |
-| `authentication required` error | SSH key not authorized | Confirm public key is in GitHub → repo → Settings → Deploy keys |
+| App shows `OutOfSync` forever | ArgoCD can't clone repo | Verify the HTTPS URL is reachable: `git ls-remote https://github.com/holdennguyen/homelab.git` |
 | Application stuck in `Progressing` | Pod not ready | `kubectl describe pod -n <namespace>` for Events |
 | CRD not found during sync | Wrong sync wave order | Ensure `external-secrets` (wave 0) is healthy before `external-secrets-config` (wave 1) syncs |
 | Changes not deployed after push | Normal poll delay | Wait ~3min or force refresh via annotation |

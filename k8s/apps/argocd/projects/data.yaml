@@ -8,10 +8,8 @@ metadata:
 spec:
   description: Databases and persistent data stores
   sourceRepos:
-    - git@github.com:holdennguyen/homelab.git
-  destinations:
-    - server: https://kubernetes.default.svc
-      namespace: gitea-system
+    - https://github.com/holdennguyen/homelab.git
+  destinations: []
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace

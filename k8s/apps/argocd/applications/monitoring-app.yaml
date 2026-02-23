@@ -68,6 +68,14 @@ spec:
         # Prometheus
         prometheus:
           prometheusSpec:
+            securityContext:
+              runAsUser: 65534
+              runAsGroup: 65534
+              runAsNonRoot: true
+              fsGroup: 65534
+            # Set explicit global scrape and evaluation intervals to reduce resource usage
+            scrapeInterval: "60s"
+            evaluationInterval: "60s"
             retention: 15d
             resources:
               requests:
@@ -87,6 +95,11 @@ spec:
         # Alertmanager
         alertmanager:
           alertmanagerSpec:
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 2000
+              runAsNonRoot: true
+              fsGroup: 2000
             resources:
               requests:
                 cpu: 50m

@@ -190,31 +190,6 @@ resource "null_resource" "infisical_app" {
   depends_on = [helm_release.argocd, local_file.infisical_app]
 }
 
-# ── ArgoCD repository credential ──────────────────────────────────────────────
-# ArgoCD needs this to clone the private GitHub repo.
-# The Secret label argocd.argoproj.io/secret-type=repository tells ArgoCD to
-# treat it as a repository credential.
-
-resource "kubernetes_secret" "argocd_repo_credential" {
-  metadata {
-    name      = "repo-homelab"
-    namespace = kubernetes_namespace.argocd.metadata[0].name
-    labels = {
-      "argocd.argoproj.io/secret-type" = "repository"
-    }
-  }
-
-  data = {
-    type          = "git"
-    url           = var.homelab_repo_url
-    sshPrivateKey = var.argocd_repo_ssh_private_key
-  }
-
-  type = "Opaque"
-
-  depends_on = [helm_release.argocd]
-}
-
 # ── Root Application (App of Apps) ─────────────────────────────────────────────
 # We use null_resource + local-exec instead of kubernetes_manifest because
 # kubernetes_manifest validates the schema against the live API at plan time,

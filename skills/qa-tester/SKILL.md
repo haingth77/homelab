@@ -47,9 +47,7 @@ Focus testing effort based on risk:
 | ArgoCD | High | Critical | Manages all other deployments |
 | ESO + ClusterSecretStore | High | Critical | All secrets depend on it |
 | Infisical | High | Critical | Source of truth for secrets |
-| PostgreSQL | Medium | High | Data persistence, Gitea depends on it |
 | OpenClaw | Medium | High | Agent gateway, multiple components |
-| Gitea | Low | Medium | Independent service |
 | Monitoring | Low | Medium | Observability, non-blocking |
 
 ## Validation commands
@@ -101,22 +99,6 @@ kubectl top pods -A --sort-by=memory
 | Health endpoint | `kubectl exec -n openclaw deploy/openclaw -- wget -qO- http://localhost:18789/health` | 200 |
 | Config mounted | `kubectl exec -n openclaw deploy/openclaw -- cat /config/openclaw.json \| jq '.agents.list \| length'` | Agent count matches config |
 | Skills loaded | `kubectl exec -n openclaw deploy/openclaw -- ls /skills/` | All skill directories present |
-
-### Gitea
-
-| Check | Command | Pass criteria |
-|---|---|---|
-| Pod running | `kubectl get pods -n gitea-system -l app.kubernetes.io/name=gitea` | `Running`, 0 restarts |
-| HTTP health | `curl -sf http://localhost:30300/api/healthz` | 200 |
-| DB connection | `kubectl logs -n gitea-system deploy/gitea --tail=20 \| grep -i "database"` | No errors |
-
-### PostgreSQL
-
-| Check | Command | Pass criteria |
-|---|---|---|
-| Pod running | `kubectl get pods -n gitea-system -l app.kubernetes.io/name=postgresql` | `Running`, 0 restarts |
-| Accepting connections | `kubectl exec -n gitea-system deploy/postgresql -- pg_isready` | accepting connections |
-| PVC bound | `kubectl get pvc -n gitea-system` | `Bound` |
 
 ### Monitoring (Prometheus + Grafana)
 
@@ -186,14 +168,14 @@ Rules:
 
 ## Defect classification
 
-When reporting issues found during testing:
+Uses the canonical scale from the `incident-response` skill:
 
 | Severity | Criteria | Response expectation |
 |---|---|---|
-| **Blocker** | Service down, data loss risk, security exposure | Immediate fix required before any other work |
-| **Critical** | Core functionality broken, but workaround exists | Fix within same day |
-| **Major** | Feature degraded, non-critical path affected | Fix within next PR cycle |
-| **Minor** | Cosmetic, docs mismatch, non-functional | Best effort, can defer |
+| **SEV-1** | Service down, data loss risk, security exposure | Immediate fix required before any other work |
+| **SEV-2** | Core functionality broken, but workaround exists | Fix within same day |
+| **SEV-3** | Feature degraded, non-critical path affected | Fix within next PR cycle |
+| **SEV-4** | Cosmetic, docs mismatch, non-functional | Best effort, can defer |
 
 ## Test report format
 
@@ -205,7 +187,7 @@ When reporting results, use this structure:
 ### Summary
 - **Scope:** <what was tested>
 - **Result:** X/Y checks passed
-- **Blockers:** <any blocking issues>
+- **SEV-1 issues:** <any blocking issues>
 
 ### Results
 
@@ -217,5 +199,5 @@ When reporting results, use this structure:
 
 | ID | Severity | Service | Description | Action |
 |---|---|---|---|---|
-| QA-NNN | Major | <service> | <what's wrong> | <who to notify, what to fix> |
+| QA-NNN | SEV-3 | <service> | <what's wrong> | <who to notify, what to fix> |
 ```
