@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: vikunja
 
 resources:
-  - namespace.yaml
   - external-secret.yaml
   - postgresql-pvc.yaml
   - postgresql-service.yaml
