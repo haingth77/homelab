@@ -174,8 +174,8 @@ sleep 1
 tmux send-keys -t "${SESSION}" "agent 'Create a REST API handler for /api/health'" Enter
 # Wait for completion...
 
-# Follow-up refinement
-tmux send-keys -t "${SESSION}" "agent --resume 'Add input validation and error handling'" Enter
+# Follow-up refinement (resume most recent session with a new prompt)
+tmux send-keys -t "${SESSION}" "agent resume 'Add input validation and error handling'" Enter
 # Wait for completion...
 ```
 

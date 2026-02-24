@@ -482,7 +482,7 @@ Examples of things you can ask:
 - `@OpenClaw check the health of all services`
 - `@OpenClaw show me the ArgoCD sync status`
 
-The bot routes all messages to the `homelab-admin` orchestrator, which can delegate to sub-agents (`devops-sre`, `software-engineer`, `security-analyst`, `qa-tester`) as needed.
+The bot routes all messages to the `homelab-admin` orchestrator, which can delegate to sub-agents (`devops-sre`, `software-engineer`, `security-analyst`, `qa-tester`, `cursor-agent`) as needed.
 
 ### Configuration Reference
 

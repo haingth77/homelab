@@ -112,7 +112,7 @@ When the primary fails or hits rate limits, OpenClaw falls through to Gemini. Au
 
 ### How the Orchestrator Works
 
-Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the sole agent with `"default": true` in the config. The other three agents are sub-agents — they don't appear in the UI dropdown and can only be spawned by the orchestrator.
+Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the sole agent with `"default": true` in the config. The other five agents are sub-agents — they don't appear in the UI dropdown and can only be spawned by the orchestrator.
 
 **Delegation rules:**
 
