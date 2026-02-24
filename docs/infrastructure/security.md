@@ -264,7 +264,7 @@ This design allows the agent to **monitor everything, operate on running workloa
 
 ### Secrets Accessible
 
-Four secrets are injected as environment variables into the OpenClaw container:
+Five secrets are injected as environment variables into the OpenClaw container:
 
 | Secret Key | Purpose | Scope |
 |---|---|---|
@@ -272,6 +272,7 @@ Four secrets are injected as environment variables into the OpenClaw container:
 | `OPENROUTER_API_KEY` | LLM inference via OpenRouter | OpenRouter account (usage-based billing) |
 | `GEMINI_API_KEY` | LLM inference via Google Gemini (fallback) | Google AI Studio account |
 | `GITHUB_TOKEN` | GitHub API access for the agent git workflow | **Fine-grained PAT scoped to `holdennguyen/homelab` only**: read access to metadata; read and write access to code, issues, and pull requests |
+| `DISCORD_BOT_TOKEN` | Discord bot for chat-based agent interaction | Discord application bot user |
 
 The `GITHUB_TOKEN` is the most sensitive credential from a blast-radius perspective. Its scope is intentionally narrow:
 
@@ -280,7 +281,7 @@ The `GITHUB_TOKEN` is the most sensitive credential from a blast-radius perspect
 - Cannot manage repository settings, webhooks, or deploy keys
 - Write access is limited to code (branches/PRs), issues, and pull requests
 
-All four secrets are also readable via `kubectl get secret openclaw-secret -n openclaw` due to the RBAC `secrets` read permission. Any process running inside the container can access them through the environment.
+All five secrets are also readable via `kubectl get secret openclaw-secret -n openclaw` due to the RBAC `secrets` read permission. Any process running inside the container can access them through the environment.
 
 ### Host Filesystem Access
 
@@ -341,15 +342,16 @@ The gateway starts with `--allow-unconfigured`, which permits connections from a
 
 ### Agent Capabilities
 
-OpenClaw runs five agents in an orchestrator pattern:
+OpenClaw runs six agents in an orchestrator pattern:
 
 | Agent | Skills | Can Delegate To |
 |---|---|---|
-| `homelab-admin` (orchestrator) | homelab-admin, gitops, secret-management, incident-response | devops-sre, software-engineer, security-analyst, qa-tester |
-| `devops-sre` | devops-sre, gitops, secret-management, incident-response | software-engineer, security-analyst, qa-tester |
-| `software-engineer` | software-engineer | devops-sre, security-analyst, qa-tester |
-| `security-analyst` | security-analyst, secret-management | devops-sre, software-engineer, qa-tester |
-| `qa-tester` | qa-tester, gitops, incident-response | devops-sre, software-engineer |
+| `homelab-admin` (orchestrator) | homelab-admin, gitops, secret-management, incident-response | devops-sre, software-engineer, security-analyst, qa-tester, cursor-agent |
+| `devops-sre` | devops-sre, gitops, secret-management, incident-response | — |
+| `software-engineer` | software-engineer, gitops | — |
+| `security-analyst` | security-analyst, gitops, secret-management | — |
+| `qa-tester` | qa-tester, gitops, secret-management, incident-response | — |
+| `cursor-agent` | cursor-agent, gitops | — |
 
 **Spawning limits:**
 
@@ -458,7 +460,7 @@ flowchart TD
 | **Non-root execution** | Pod runs as UID 1000 with `runAsNonRoot: true` | Cannot escalate to root inside the container, cannot modify system binaries, cannot change container network config |
 | **Targeted RBAC (no cluster-admin)** | ClusterRole grants cluster-wide read + scoped operational writes (restart, scale, annotate). Namespace Role grants secrets read + pods/exec in `openclaw` only | Cannot create or delete deployments, services, or namespaces. Cannot read secrets outside `openclaw`. Cannot modify ClusterRoles, NetworkPolicies, or RBAC resources. Cannot exec into pods in other namespaces |
 | **Network policies** | Default-deny with explicit allowlist: DNS, K8s API (:6443), Tailscale ingress (:18789), internet egress (:443) | Cannot reach other namespaces' pods over the network (declarative intent — enforcement depends on CNI). Cannot open arbitrary ports. Cannot reach macOS services on the host network (except through the K8s API server) |
-| **Secret scoping** | Only `openclaw-secret` is injected (5 API keys). Infisical stores all other secrets in separate ExternalSecrets per namespace | Cannot read Authentik passwords, Grafana credentials, PostgreSQL passwords, or any secret outside its namespace |
+| **Secret scoping** | Only `openclaw-secret` is injected (5 keys). Infisical stores all other secrets in separate ExternalSecrets per namespace | Cannot read Authentik passwords, Grafana credentials, PostgreSQL passwords, or any secret outside its namespace |
 | **GitHub token scope** | Fine-grained PAT: only `holdennguyen/homelab`, only code/issues/PRs | Cannot access other repos, cannot modify repo settings/webhooks, cannot access GitHub account settings, cannot read private repos beyond `homelab` |
 | **Git workflow guardrails** | Branch protection on `main` requires PR + human review | Cannot push directly to `main`, cannot merge without human approval, cannot bypass branch protection |
 
@@ -471,7 +473,7 @@ To be precise about the actual attack surface:
 | Its own container filesystem (`/data`, `/tmp`, etc.) | Read-write | Low — only agent workspace data, no personal files |
 | `agents/workspaces/*.md` via hostPath | Read-only | Minimal — only Markdown personality files |
 | `skills/*.md` via hostPath | Read-only | Minimal — only skill definition Markdown files |
-| `openclaw-secret` (5 API keys) | Read via env vars and `kubectl get secret` | Medium — LLM API keys could incur billing; GitHub token scoped to one repo |
+| `openclaw-secret` (5 keys) | Read via env vars and `kubectl get secret` | Medium — LLM API keys could incur billing; GitHub token scoped to one repo |
 | Pods in `openclaw` namespace | Read + exec | Medium — only the OpenClaw pod itself runs there |
 | Pods, deployments, services, events in **all** namespaces | Read-only | Low — monitoring only, cannot modify |
 | Deployments, statefulsets in **all** namespaces | Patch (restart, scale) | Medium — can restart or scale workloads; scaling to 0 is gated by Critical Risk Protocol |

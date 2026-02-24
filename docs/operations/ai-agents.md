@@ -133,6 +133,47 @@ When delegating, `homelab-admin` uses `sessions_spawn` and provides:
 
 The spawned sub-agent session appears in the UI sidebar. Sub-agents report results back via `sessions_announce`.
 
+### Cursor Agent Handoff Protocol
+
+The `cursor-agent` is unique among sub-agents: it bridges OpenClaw's orchestration layer with the Cursor CLI to perform AI-assisted code generation. Instead of directly editing files, it invokes the Cursor CLI (either non-interactively or via tmux) and reviews the generated output before committing.
+
+```mermaid
+sequenceDiagram
+    participant HA as homelab-admin<br/>(Orchestrator)
+    participant CA as cursor-agent<br/>(OpenClaw sub-agent)
+    participant CLI as Cursor CLI<br/>(agent command)
+    participant GH as GitHub
+
+    HA->>CA: sessions_spawn with task context<br/>(description, repo, files, constraints)
+    CA->>CA: Clone/update repo, create branch,<br/>set git identity
+    CA->>CLI: agent -p 'prompt' --force<br/>(or tmux session for complex tasks)
+    CLI-->>CA: Generated code changes
+    CA->>CA: Review diff: no secrets,<br/>style check, test coverage
+    alt Quality OK
+        CA->>GH: git commit + push + gh pr create
+        GH-->>CA: PR URL
+        CA-->>HA: sessions_announce: PR URL + summary
+    else Quality concerns
+        CA-->>HA: Report issues, request guidance
+    end
+```
+
+**Execution modes** (selected by task complexity):
+
+| Complexity | Mode | Command |
+|---|---|---|
+| Simple, single-file | Non-interactive | `agent -p '<prompt>' --force` |
+| Multi-file, needs context | Non-interactive with `@file` refs | `agent -p '<prompt>' --force` |
+| Iterative, needs refinement | tmux automation | `tmux` session with interactive `agent` |
+
+**Prerequisites** (follow-up work, not yet in the Docker image):
+
+- Cursor CLI (`agent` command) must be installed in the OpenClaw container image
+- `tmux` must be installed for complex task execution
+- `CURSOR_API_KEY` secret must be added to Infisical and wired through ESO
+
+See the `cursor-agent` skill (`skills/cursor-agent/SKILL.md`) for the full CLI reference, tmux automation patterns, and troubleshooting guide.
+
 ### Mandatory Git Workflow
 
 ALL agents enforce a mandatory git workflow for any change to the homelab repository. No agent — including the orchestrator — pushes directly to `main`. Branch protection is enforced on `main`: PRs require at least one approving review, force pushes are blocked, and linear history is required.
