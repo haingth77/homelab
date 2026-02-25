@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph infisical["Infisical (homelab / prod)"]
-        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN\nDISCORD_BOT_TOKEN\nVIKUNJA_API_TOKEN\nDISCORD_WEBHOOK_VIKUNJA"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN\nDISCORD_BOT_TOKEN\nVIKUNJA_API_TOKEN\nDISCORD_WEBHOOK_VIKUNJA\nDISCORD_WEBHOOK_ALERTS"]
     end
 
     subgraph providers["AI Model Providers"]
@@ -232,7 +232,8 @@ Add the following secrets to Infisical under **homelab / prod**:
 | `GITHUB_TOKEN` | GitHub PAT (Fine-grained) with repo scope for `holdennguyen/homelab` | Yes (for git workflow) |
 | `DISCORD_BOT_TOKEN` | From [Discord Developer Portal](https://discord.com/developers/applications) → Bot → Reset Token | Yes (for Discord chat channel) |
 | `VIKUNJA_API_TOKEN` | From Vikunja UI → Settings → API Tokens → Create Token | Yes (for Vikunja task management integration) |
-| `DISCORD_WEBHOOK_VIKUNJA` | From Discord channel → Edit Channel → Integrations → Webhooks → New Webhook | Yes (for Vikunja task notifications to Discord) |
+| `DISCORD_WEBHOOK_VIKUNJA` | From Discord `#daily-briefing` channel → Integrations → Webhooks | Yes (for daily briefing + task notifications) |
+| `DISCORD_WEBHOOK_ALERTS` | From Discord `#alerts` channel → Integrations → Webhooks | Yes (for cluster health alerts + incident notifications) |
 
 After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
 
@@ -346,7 +347,51 @@ Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8
 
 ## Discord Chat Channel
 
-OpenClaw connects to Discord as a chat channel, allowing users to converse with homelab agents from any Discord client (mobile, desktop, or web). Messages sent in a Discord channel or DM are routed to the default `homelab-admin` orchestrator agent, which can delegate to sub-agents as needed.
+OpenClaw connects to Discord as a chat channel, allowing users to converse with homelab agents from any Discord client (mobile, desktop, or web). The Discord server uses a **multi-channel architecture** with per-channel skill isolation, so each channel has a focused purpose.
+
+### Channel Architecture
+
+```mermaid
+flowchart TD
+    subgraph discord["Discord Server: holden.nguyen's homelab"]
+        subgraph category["Homelab (Category)"]
+            General["#general\nFull homelab admin"]
+            Briefing["#daily-briefing\nWeather + tasks + lifestyle"]
+            Alerts["#alerts\nCluster health + incidents"]
+        end
+    end
+
+    subgraph openclaw["OpenClaw Pod"]
+        HA["homelab-admin agent"]
+    end
+
+    subgraph skills_gen["#general skills"]
+        SG1["homelab-admin"] & SG2["gitops"] & SG3["secret-management"] & SG4["incident-response"] & SG5["vikunja"] & SG6["daily-briefing"] & SG7["weather"]
+    end
+
+    subgraph skills_brief["#daily-briefing skills"]
+        SB1["vikunja"] & SB2["daily-briefing"] & SB3["weather"]
+    end
+
+    subgraph skills_alert["#alerts skills"]
+        SA1["homelab-admin"] & SA2["incident-response"]
+    end
+
+    General --> HA
+    Briefing --> HA
+    Alerts --> HA
+    HA --> skills_gen
+    HA --> skills_brief
+    HA --> skills_alert
+```
+
+| Channel | Purpose | Skills | Webhook |
+|---|---|---|---|
+| `#general` | Full homelab admin — cluster ops, GitOps, troubleshooting, general chat | All 7 skills | — |
+| `#daily-briefing` | Personal assistant — morning briefing, task management, weather, lifestyle advice | `vikunja`, `daily-briefing`, `weather` | `DISCORD_WEBHOOK_VIKUNJA` |
+| `#alerts` | Cluster health — incident alerts, pod failures, ArgoCD sync issues | `homelab-admin`, `incident-response` | `DISCORD_WEBHOOK_ALERTS` |
+
+Each channel has a system prompt that constrains the agent's behavior to the channel's purpose. The `groupPolicy` is set to `allowlist` so the bot only responds in explicitly configured channels.
 
 ### How It Works
 
@@ -359,12 +404,19 @@ sequenceDiagram
 
     User->>Discord: Send message in channel / DM
     Discord->>OC: Gateway event (WebSocket)
-    OC->>OC: Route to default agent (homelab-admin)
+    OC->>OC: Route to homelab-admin with channel-scoped skills
     OC->>Model: LLM request
     Model-->>OC: Response
     OC->>Discord: Send reply to channel / DM
     Discord-->>User: Bot message appears
 ```
+
+### Automated Notifications
+
+| Notification | Channel | Schedule | Mechanism |
+|---|---|---|---|
+| Daily briefing (weather + tasks + tips) | `#daily-briefing` | 6:30 AM ICT daily | OpenClaw cron → `DISCORD_WEBHOOK_VIKUNJA` |
+| Cluster alerts | `#alerts` | On incident detection | Agent → `DISCORD_WEBHOOK_ALERTS` |
 
 ### Discord Concepts (quick primer)
 
@@ -495,7 +547,8 @@ Discord requires two config sections in `openclaw.json`:
 | Key | Value | Purpose |
 |---|---|---|
 | `enabled` | `true` | Activate the Discord channel on startup |
-| `groupPolicy` | `"open"` | Allow messages from all guild channels (mention-gating still applies) |
+| `groupPolicy` | `"allowlist"` | Only respond in explicitly configured guild channels |
+| `guilds.<id>.channels.<id>` | Per-channel config | Allowlist, system prompt, and skill scope per channel |
 
 **Plugin entry** (`plugins.entries.discord`):
 
@@ -507,12 +560,20 @@ The plugin entry is required because the ConfigMap is mounted read-only. OpenCla
 
 The bot token is resolved from the `DISCORD_BOT_TOKEN` environment variable (injected via ESO from Infisical). No token is stored in the config file.
 
+**Per-channel guild config** (under `channels.discord.guilds.<guildId>.channels.<channelId>`):
+
+| Key | Type | Purpose |
+|---|---|---|
+| `allow` | `boolean` | Whether the bot responds in this channel |
+| `systemPrompt` | `string` | Channel-specific behavior instructions |
+| `skills` | `string[]` | Restrict which skills the agent can use in this channel |
+
 **Available group policies:**
 
 | Policy | Behavior |
 |---|---|
-| `"open"` | Bot responds in any channel it can see (when mentioned). This is the current setting. |
-| `"allowlist"` | Bot only responds in channels explicitly listed in `channels.discord.guilds.<id>.channels` |
+| `"open"` | Bot responds in any channel it can see (when mentioned) |
+| `"allowlist"` | Bot only responds in channels explicitly listed in `channels.discord.guilds.<id>.channels`. **This is the current setting.** |
 | `"disabled"` | Block all guild channel messages; only DMs work |
 
 ## Running CLI Commands Inside the Pod
@@ -652,7 +713,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
 | `agents.list[].subagents` | `allowAgents` | Per-agent list | Controls which agents each agent can spawn — only the orchestrator has non-empty lists |
 | `channels.discord` | `enabled` | `true` | Connect to Discord on startup using `DISCORD_BOT_TOKEN` env var |
-| `channels.discord` | `groupPolicy` | `"open"` | Respond in any guild channel the bot can see (mention required) |
+| `channels.discord` | `groupPolicy` | `"allowlist"` | Only respond in explicitly configured channels |
 | `plugins.entries.discord` | `enabled` | `true` | Load Discord extension plugin (required for read-only ConfigMap) |
 
 ## Multi-Agent & Skills Architecture
@@ -690,9 +751,11 @@ flowchart TD
         S7["qa-tester"]
         S8["incident-response"]
         S9["vikunja"]
+        S10["daily-briefing"]
+        S11["weather"]
     end
 
-    HA --> S1 & S5 & S6 & S8 & S9
+    HA --> S1 & S5 & S6 & S8 & S9 & S10 & S11
     DS --> S2 & S5 & S6 & S8
     SE --> S3 & S5
     SA --> S4 & S5 & S6
@@ -703,7 +766,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 
 | Agent | Assigned Skills |
 |---|---|
-| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja` |
+| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
 | `devops-sre` | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
 | `software-engineer` | `software-engineer`, `gitops` |
 | `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
@@ -747,6 +810,8 @@ Homelab-specific skills live in `skills/` at the repo root and are mounted into 
 | `incident-response` | Incident triage, rollback procedures, pre-merge validation, post-incident documentation |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
 | `vikunja` | Vikunja task management API — create, query, update, complete tasks; Discord notifications |
+| `daily-briefing` | AI-powered morning briefing — weather, tasks, cluster health, contextual lifestyle advice |
+| `weather` | Real-time weather via Open-Meteo and wttr.in (no API key required) |
 | `common/Documentation` | Standardized documentation generation |
 
 Skills follow the [AgentSkills](https://agentskills.io) format with OpenClaw-compatible `SKILL.md` frontmatter.

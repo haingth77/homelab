@@ -21,7 +21,7 @@ data:
             "default": true,
             "workspace": "/data/workspaces/homelab-admin",
             "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
-            "skills": ["homelab-admin", "gitops", "secret-management", "incident-response", "vikunja"],
+            "skills": ["homelab-admin", "gitops", "secret-management", "incident-response", "vikunja", "daily-briefing", "weather"],
             "subagents": {
               "allowAgents": ["devops-sre", "software-engineer", "security-analyst", "qa-tester"]
             }
@@ -83,7 +83,30 @@ data:
       "channels": {
         "discord": {
           "enabled": true,
-          "groupPolicy": "open"
+          "groupPolicy": "allowlist",
+          "guilds": {
+            "1475145705847914700": {
+              "slug": "homelab",
+              "requireMention": false,
+              "channels": {
+                "1475145706875654359": {
+                  "allow": true,
+                  "systemPrompt": "This is the #general channel. You are the homelab admin assistant. Handle any homelab question — cluster ops, GitOps, troubleshooting, service management, and general conversation. Use all available skills.",
+                  "skills": ["homelab-admin", "gitops", "secret-management", "incident-response", "vikunja", "daily-briefing", "weather"]
+                },
+                "1476238467510829148": {
+                  "allow": true,
+                  "systemPrompt": "This is the #daily-briefing channel. Focus exclusively on personal assistant tasks: daily routine management, task tracking via Vikunja, weather updates, and lifestyle advice. Do NOT discuss cluster operations or infrastructure here. Be warm, concise, and actionable.",
+                  "skills": ["vikunja", "daily-briefing", "weather"]
+                },
+                "1476238496799789118": {
+                  "allow": true,
+                  "systemPrompt": "This is the #alerts channel. Focus exclusively on cluster health monitoring, incident response, and operational alerts. Be concise and action-oriented. Only discuss infrastructure issues, pod health, ArgoCD sync problems, and service degradation.",
+                  "skills": ["homelab-admin", "incident-response"]
+                }
+              }
+            }
+          }
         }
       },
       "skills": {
