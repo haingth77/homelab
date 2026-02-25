@@ -51,17 +51,24 @@ curl -s -H "$AUTH" "$VIKUNJA_URL/projects/<PROJECT_ID>/tasks" | jq '.[] | {id, t
 
 ### Get tasks due today
 
+Fetch tasks from each project and filter by due date (the `/tasks/all` endpoint is unavailable in Vikunja v1.1.0):
+
 ```bash
-TODAY=$(date -u +%Y-%m-%dT00:00:00Z)
-TOMORROW=$(date -u -v+1d +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -d "+1 day" +%Y-%m-%dT00:00:00Z)
-curl -s -H "$AUTH" "$VIKUNJA_URL/tasks/all?filter=due_date>$TODAY&&due_date<$TOMORROW" | jq '.[] | {id, title, due_date, project_id}'
+PROJECTS=$(curl -s -H "$AUTH" "$VIKUNJA_URL/projects" | jq -r '.[].id')
+TODAY=$(date -u +%Y-%m-%d)
+for PID in $PROJECTS; do
+  curl -s -H "$AUTH" "$VIKUNJA_URL/projects/$PID/tasks" | jq --arg today "$TODAY" '.[] | select(.done == false and (.due_date[:10] == $today)) | {id, title, due_date, priority, project_id}'
+done
 ```
 
 ### Get overdue tasks
 
 ```bash
+PROJECTS=$(curl -s -H "$AUTH" "$VIKUNJA_URL/projects" | jq -r '.[].id')
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-curl -s -H "$AUTH" "$VIKUNJA_URL/tasks/all?filter=due_date<$NOW&&done=false" | jq '.[] | {id, title, due_date, project_id}'
+for PID in $PROJECTS; do
+  curl -s -H "$AUTH" "$VIKUNJA_URL/projects/$PID/tasks" | jq --arg now "$NOW" '.[] | select(.done == false and .due_date > "0001" and .due_date < $now) | {id, title, due_date, priority, project_id}'
+done
 ```
 
 ### Create a task
@@ -108,8 +115,14 @@ curl -s -X DELETE -H "$AUTH" "$VIKUNJA_URL/tasks/<TASK_ID>"
 
 ### Search tasks
 
+Search across all projects by iterating:
+
 ```bash
-curl -s -H "$AUTH" "$VIKUNJA_URL/tasks/all?s=search+term" | jq '.[] | {id, title, done, project_id}'
+TERM="search term"
+PROJECTS=$(curl -s -H "$AUTH" "$VIKUNJA_URL/projects" | jq -r '.[].id')
+for PID in $PROJECTS; do
+  curl -s -H "$AUTH" "$VIKUNJA_URL/projects/$PID/tasks" | jq --arg term "$TERM" '[.[] | select(.title | ascii_downcase | contains($term | ascii_downcase))] | .[] | {id, title, done, project_id}'
+done
 ```
 
 ## Label operations
@@ -177,9 +190,15 @@ curl -s -X POST -H "Content-Type: application/json" \
 ### Send daily summary to Discord
 
 ```bash
-TODAY=$(date -u +%Y-%m-%dT00:00:00Z)
-TOMORROW=$(date -u -v+1d +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -d "+1 day" +%Y-%m-%dT00:00:00Z)
-TASKS=$(curl -s -H "$AUTH" "$VIKUNJA_URL/tasks/all?filter=due_date>$TODAY&&due_date<$TOMORROW&&done=false" | jq -r '.[] | "• \(.title) (priority: \(.priority))"')
+TODAY=$(date -u +%Y-%m-%d)
+PROJECTS=$(curl -s -H "$AUTH" "$VIKUNJA_URL/projects" | jq -r '.[].id')
+TASKS=""
+for PID in $PROJECTS; do
+  PROJ_TASKS=$(curl -s -H "$AUTH" "$VIKUNJA_URL/projects/$PID/tasks" | jq -r --arg today "$TODAY" '.[] | select(.done == false and (.due_date[:10] == $today)) | "• \(.title) (priority: \(.priority))"')
+  if [ -n "$PROJ_TASKS" ]; then
+    TASKS="${TASKS}${PROJ_TASKS}\n"
+  fi
+done
 if [ -n "$TASKS" ]; then
   curl -s -X POST -H "Content-Type: application/json" \
     "$DISCORD_WEBHOOK_VIKUNJA" \

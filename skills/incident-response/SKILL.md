@@ -24,6 +24,24 @@ Procedures for detecting, triaging, rolling back, and documenting incidents in t
 | **SEV-3** | Non-critical service degraded, workaround exists | Within 1 hour |
 | **SEV-4** | Cosmetic issue, no user impact | Next available cycle |
 
+## Discord Alerts
+
+When detecting incidents or cluster degradation, send alerts to the `#alerts` Discord channel via the dedicated webhook:
+
+```bash
+curl -s -X POST -H "Content-Type: application/json" "$DISCORD_WEBHOOK_ALERTS" \
+  -d '{
+    "embeds": [{
+      "title": "⚠ Cluster Alert — SEV-N",
+      "description": "**Service:** <name>\n**Status:** <CrashLoopBackOff|Degraded|...>\n**Namespace:** <ns>\n**Action:** <investigating|rolling back|resolved>",
+      "color": 15158332,
+      "footer": {"text": "Homelab Incident Response"}
+    }]
+  }'
+```
+
+Color codes: SEV-1/2 = `15158332` (red), SEV-3 = `15105570` (orange), SEV-4 = `16776960` (yellow), Resolved = `3066993` (green).
+
 ## Phase 1: Detection & Triage
 
 When a deployment causes issues, run this triage sequence to assess blast radius:
