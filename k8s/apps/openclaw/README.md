@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph infisical["Infisical (homelab / prod)"]
-        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN\nDISCORD_BOT_TOKEN"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN\nDISCORD_BOT_TOKEN\nVIKUNJA_API_TOKEN\nDISCORD_WEBHOOK_VIKUNJA\nDISCORD_WEBHOOK_ALERTS"]
     end
 
     subgraph providers["AI Model Providers"]
@@ -231,6 +231,9 @@ Add the following secrets to Infisical under **homelab / prod**:
 | `GEMINI_API_KEY` | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Yes (fallback model provider) |
 | `GITHUB_TOKEN` | GitHub PAT (Fine-grained) with repo scope for `holdennguyen/homelab` | Yes (for git workflow) |
 | `DISCORD_BOT_TOKEN` | From [Discord Developer Portal](https://discord.com/developers/applications) → Bot → Reset Token | Yes (for Discord chat channel) |
+| `VIKUNJA_API_TOKEN` | From Vikunja UI → Settings → API Tokens → Create Token | Yes (for Vikunja task management integration) |
+| `DISCORD_WEBHOOK_VIKUNJA` | From Discord `#daily-briefing` channel → Integrations → Webhooks | Yes (for daily briefing + task notifications) |
+| `DISCORD_WEBHOOK_ALERTS` | From Discord `#alerts` channel → Integrations → Webhooks | Yes (for cluster health alerts + incident notifications) |
 
 After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
 
@@ -344,7 +347,64 @@ Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8
 
 ## Discord Chat Channel
 
-OpenClaw connects to Discord as a chat channel, allowing users to converse with homelab agents from any Discord client (mobile, desktop, or web). Messages sent in a Discord channel or DM are routed to the default `homelab-admin` orchestrator agent, which can delegate to sub-agents as needed.
+OpenClaw connects to Discord as a chat channel, allowing users to converse with homelab agents from any Discord client (mobile, desktop, or web). The Discord server uses a **multi-channel architecture** with per-channel skill isolation, so each channel has a focused purpose.
+
+### Channel Architecture
+
+```mermaid
+flowchart TD
+    subgraph discord["Discord Server: holden.nguyen's homelab"]
+        subgraph category["Homelab (Category)"]
+            General["#general\nFull homelab admin"]
+            Briefing["#daily-briefing\nWeather + tasks + lifestyle"]
+            Alerts["#alerts\nCluster health + incidents"]
+        end
+    end
+
+    subgraph openclaw["OpenClaw Pod"]
+        HA["homelab-admin agent"]
+    end
+
+    subgraph skills_gen["#general skills"]
+        SG1["homelab-admin"] & SG2["gitops"] & SG3["secret-management"] & SG4["incident-response"] & SG5["vikunja"] & SG6["daily-briefing"] & SG7["weather"]
+    end
+
+    subgraph skills_brief["#daily-briefing skills"]
+        SB1["vikunja"] & SB2["daily-briefing"] & SB3["weather"]
+    end
+
+    subgraph skills_alert["#alerts skills"]
+        SA1["homelab-admin"] & SA2["incident-response"]
+    end
+
+    General --> HA
+    Briefing --> HA
+    Alerts --> HA
+    HA --> skills_gen
+    HA --> skills_brief
+    HA --> skills_alert
+```
+
+| Channel | Purpose | Skills | Webhook |
+|---|---|---|---|
+| `#general` | Full homelab admin — cluster ops, GitOps, troubleshooting, general chat | All 7 skills | — |
+| `#daily-briefing` | Personal schedule assistant & journal companion — morning briefing, interactive schedule management, task tracking, journal check-ins/reflections, weather, lifestyle advice | `vikunja`, `daily-briefing`, `weather` | `DISCORD_WEBHOOK_VIKUNJA` |
+| `#alerts` | Cluster health — incident alerts, pod failures, ArgoCD sync issues | `homelab-admin`, `incident-response` | `DISCORD_WEBHOOK_ALERTS` |
+
+Each channel has a system prompt that constrains the agent's behavior to the channel's purpose. The `groupPolicy` is set to `allowlist` so the bot only responds in explicitly configured channels.
+
+The `#daily-briefing` channel supports interactive conversations:
+
+| Interaction | Example | What happens |
+|---|---|---|
+| Morning check-in | "Slept about 6 hours, slight headache, energy 4/10" | Agent extracts structured data, saves to Journal (project 3), adjusts today's advice |
+| Evening reflection | "1. Fixed a tricky DNS issue 2. Tried a new recipe 3. Learned a guitar riff" | Agent saves to Journal (project 3), references it in tomorrow's briefing |
+| Schedule query | "Show my schedule" / "What's my day look like?" | Agent fetches today's routine tasks from project 2 |
+| Add to routine | "Add 15 min meditation after singing" | Agent reviews schedule, finds a gap, suggests placement, confirms before creating |
+| Reschedule | "Move guitar to Saturday" | Agent identifies conflicts, offers alternatives |
+| Skip task | "Skip workout today" | Marks done without breaking recurrence |
+| One-time task | "Dentist appointment Thursday 2 PM" | Creates non-recurring task at the specified time |
+| Journal lookback | "How was my sleep this week?" | Queries project 3 entries and summarizes trends |
 
 ### How It Works
 
@@ -357,12 +417,101 @@ sequenceDiagram
 
     User->>Discord: Send message in channel / DM
     Discord->>OC: Gateway event (WebSocket)
-    OC->>OC: Route to default agent (homelab-admin)
+    OC->>OC: Route to homelab-admin with channel-scoped skills
     OC->>Model: LLM request
     Model-->>OC: Response
     OC->>Discord: Send reply to channel / DM
     Discord-->>User: Bot message appears
 ```
+
+### Automated Notifications
+
+| Notification | Channel | Schedule | Mechanism |
+|---|---|---|---|
+| Daily briefing (weather + tasks + journal-aware advice) | `#daily-briefing` | 6:30 AM ICT daily | OpenClaw cron → `DISCORD_WEBHOOK_VIKUNJA` |
+| Cluster alerts | `#alerts` | On incident detection | Agent → `DISCORD_WEBHOOK_ALERTS` |
+
+### Daily Routine & Journal System
+
+The `#daily-briefing` channel is backed by a personalized daily routine and journal system built on Vikunja. This is not a static task list — it's a feedback loop where journal entries from today shape tomorrow's briefing.
+
+#### Vikunja Projects
+
+| Project | ID | Purpose |
+|---|---|---|
+| Inbox | 1 | Default project for ad-hoc tasks |
+| Daily Routine | 2 | 23 recurring tasks forming the daily health routine |
+| Journal | 3 | Morning check-ins and evening reflections (permanent records) |
+
+#### Daily Routine (Project 2)
+
+23 recurring tasks organized in time blocks, tailored to the owner's health goals (weight gain, sleep improvement, headache prevention):
+
+| Block | Time | Tasks |
+|---|---|---|
+| Morning | 5:30–7:30 AM | Wake + hydrate, morning check-in, stretch + breathing, walk/jog, breakfast, reading |
+| Work | 8:00 AM–5:00 PM | Mid-morning snack, eye breaks, lunch, post-lunch walk, afternoon snack, shoulder stretch |
+| Fitness | 5:30–6:30 PM | Strength training (Mon/Wed/Fri) or cardio (Tue/Thu) |
+| Dinner | 6:30–7:30 PM | Calorie-surplus meal |
+| Creative | 7:30–8:30 PM | Piano (Mon/Wed/Fri) or guitar (Tue/Thu), singing practice |
+| Wind-down | 8:30–9:30 PM | Evening reading, evening reflection, sleep prep ritual, lights out |
+| Weekend | Varies | Meal prep (Saturday), weekly health review (Sunday) |
+
+Tasks include detailed descriptions with nutrition targets (2,500–3,000 kcal/day, 120g+ protein), exercise guidance (compound lifts, zone 2 cardio), and sleep hygiene protocols.
+
+#### Journal Feedback Loop (Project 3)
+
+```mermaid
+flowchart LR
+    subgraph morning ["Morning (5:35 AM)"]
+        CheckIn["Morning Check-in\nSleep quality, energy,\nheadache, mood"]
+    end
+
+    subgraph briefing ["Briefing (6:30 AM)"]
+        Cron["Daily Briefing Cron\nReads yesterday's journal\n+ weather + tasks"]
+    end
+
+    subgraph evening ["Evening (8:50 PM)"]
+        Reflect["Evening Reflection\n3 interesting things\nfrom today"]
+    end
+
+    subgraph journal ["Vikunja Project 3 (Journal)"]
+        Entries["Journal Entries\n(permanent records)"]
+    end
+
+    CheckIn -->|"save"| Entries
+    Reflect -->|"save"| Entries
+    Entries -->|"yesterday's data"| Cron
+    Cron -->|"personalized advice"| morning
+```
+
+**Morning check-in** (5:35 AM): The user shares how they're feeling in `#daily-briefing`. The agent extracts structured data (sleep quality 1–10, energy 1–10, headache severity, mood) and saves it to project 3 with the `morning-checkin` label. This immediately adjusts today's advice — e.g., poor sleep triggers a lighter workout suggestion.
+
+**Evening reflection** (8:50 PM): The user shares 3 interesting things from the day. The agent saves them to project 3 with the `evening-reflection` label. Tomorrow's briefing references these — calling back wins, acknowledging challenges.
+
+**Daily briefing personalization**: The 6:30 AM cron briefing reads yesterday's journal entries and adjusts:
+
+| Yesterday's journal | Today's adjustment |
+|---|---|
+| Sleep quality < 5 | Suggest lighter workout, extra hydration |
+| Headache reported | Emphasize water (3L+), shorter eye break intervals |
+| Low energy | Stress all 5 meals, no skipping snacks |
+| Stressful mood | Lean into music session as a reset |
+| Evening win mentioned | Call it back: "You crushed [thing] yesterday!" |
+| Multiple bad sleep nights | Suggest earlier lights-out |
+| No entries yesterday | Gentle reminder to check in |
+
+#### Schedule-Aware Task Management
+
+When the user asks to add something to their routine via Discord, the agent follows a structured workflow:
+
+1. **Review current schedule** — fetch today's tasks from project 2
+2. **Find gaps** — identify available time slots between existing tasks
+3. **Suggest optimal placement** — based on task type (habit, hobby, errand, appointment)
+4. **Confirm** — present the suggestion with context before creating
+5. **Notify** — post a confirmation embed after creation
+
+Protected slots that cannot be overwritten: hydration reminders, meals, eye breaks, sleep prep (9 PM+). The agent respects day-of-week patterns (strength vs cardio, piano vs guitar).
 
 ### Discord Concepts (quick primer)
 
@@ -493,7 +642,8 @@ Discord requires two config sections in `openclaw.json`:
 | Key | Value | Purpose |
 |---|---|---|
 | `enabled` | `true` | Activate the Discord channel on startup |
-| `groupPolicy` | `"open"` | Allow messages from all guild channels (mention-gating still applies) |
+| `groupPolicy` | `"allowlist"` | Only respond in explicitly configured guild channels |
+| `guilds.<id>.channels.<id>` | Per-channel config | Allowlist, system prompt, and skill scope per channel |
 
 **Plugin entry** (`plugins.entries.discord`):
 
@@ -505,12 +655,20 @@ The plugin entry is required because the ConfigMap is mounted read-only. OpenCla
 
 The bot token is resolved from the `DISCORD_BOT_TOKEN` environment variable (injected via ESO from Infisical). No token is stored in the config file.
 
+**Per-channel guild config** (under `channels.discord.guilds.<guildId>.channels.<channelId>`):
+
+| Key | Type | Purpose |
+|---|---|---|
+| `allow` | `boolean` | Whether the bot responds in this channel |
+| `systemPrompt` | `string` | Channel-specific behavior instructions |
+| `skills` | `string[]` | Restrict which skills the agent can use in this channel |
+
 **Available group policies:**
 
 | Policy | Behavior |
 |---|---|
-| `"open"` | Bot responds in any channel it can see (when mentioned). This is the current setting. |
-| `"allowlist"` | Bot only responds in channels explicitly listed in `channels.discord.guilds.<id>.channels` |
+| `"open"` | Bot responds in any channel it can see (when mentioned) |
+| `"allowlist"` | Bot only responds in channels explicitly listed in `channels.discord.guilds.<id>.channels`. **This is the current setting.** |
 | `"disabled"` | Block all guild channel messages; only DMs work |
 
 ## Running CLI Commands Inside the Pod
@@ -650,7 +808,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 | `agents.defaults.subagents` | `maxSpawnDepth` | `2` | Orchestrator → sub-agent → leaf worker |
 | `agents.list[].subagents` | `allowAgents` | Per-agent list | Controls which agents each agent can spawn — only the orchestrator has non-empty lists |
 | `channels.discord` | `enabled` | `true` | Connect to Discord on startup using `DISCORD_BOT_TOKEN` env var |
-| `channels.discord` | `groupPolicy` | `"open"` | Respond in any guild channel the bot can see (mention required) |
+| `channels.discord` | `groupPolicy` | `"allowlist"` | Only respond in explicitly configured channels |
 | `plugins.entries.discord` | `enabled` | `true` | Load Discord extension plugin (required for read-only ConfigMap) |
 
 ## Multi-Agent & Skills Architecture
@@ -690,9 +848,12 @@ flowchart TD
         S7["qa-tester"]
         S8["incident-response"]
         S9["cursor-agent"]
+        S10["vikunja"]
+        S11["daily-briefing"]
+        S12["weather"]
     end
 
-    HA --> S1 & S5 & S6 & S8
+    HA --> S1 & S5 & S6 & S8 & S10 & S11 & S12
     DS --> S2 & S5 & S6 & S8
     SE --> S3 & S5
     SA --> S4 & S5 & S6
@@ -704,7 +865,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 
 | Agent | Assigned Skills |
 |---|---|
-| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response` |
+| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
 | `devops-sre` | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
 | `software-engineer` | `software-engineer`, `gitops` |
 | `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
@@ -750,6 +911,9 @@ Homelab-specific skills live in `skills/` at the repo root and are mounted into 
 | `incident-response` | Incident triage, rollback procedures, pre-merge validation, post-incident documentation |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
 | `cursor-agent` | Cursor CLI bridge: installation, automation, handoff protocol, code generation workflows |
+| `vikunja` | Vikunja task management API — CRUD tasks, Discord notifications, daily routine (project 2), journal (project 3) with check-ins/reflections, schedule-aware task management |
+| `daily-briefing` | AI morning briefing — weather, tasks, journal-driven advice, owner health profile, weekly schedule with nutrition targets |
+| `weather` | Real-time weather via Open-Meteo and wttr.in (no API key required) |
 | `common/Documentation` | Standardized documentation generation |
 
 Skills follow the [AgentSkills](https://agentskills.io) format with OpenClaw-compatible `SKILL.md` frontmatter.

@@ -345,7 +345,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 
 | Agent | Assigned Skills |
 |---|---|
-| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response` |
+| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
 | `devops-sre` | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
 | `software-engineer` | `software-engineer`, `gitops` |
 | `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
@@ -392,6 +392,9 @@ Skills provide domain-specific knowledge and commands to agents. They live in `s
 | `incident-response` | Incident triage, rollback procedures, pre-merge validation, post-incident documentation |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
 | `cursor-agent` | Cursor CLI bridge: installation, automation, handoff protocol, code generation workflows |
+| `vikunja` | Vikunja task management API — CRUD tasks, Discord notifications, daily routine (project 2), journal (project 3) with check-ins/reflections, schedule-aware task management |
+| `daily-briefing` | AI morning briefing — weather, tasks, journal-driven advice, owner health profile, weekly schedule with nutrition targets |
+| `weather` | Real-time weather via Open-Meteo and wttr.in (no API key required) |
 
 ### Skill Format
 
