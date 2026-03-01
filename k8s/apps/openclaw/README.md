@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph infisical["Infisical (homelab / prod)"]
-        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN\nDISCORD_BOT_TOKEN\nVIKUNJA_API_TOKEN\nDISCORD_WEBHOOK_VIKUNJA\nDISCORD_WEBHOOK_ALERTS"]
+        InfisicalSecrets["OPENCLAW_GATEWAY_TOKEN\nOPENROUTER_API_KEY\nGEMINI_API_KEY\nGITHUB_TOKEN\nDISCORD_BOT_TOKEN\nVIKUNJA_API_TOKEN\nDISCORD_WEBHOOK_VIKUNJA\nDISCORD_WEBHOOK_ALERTS\nCURSOR_API_KEY"]
     end
 
     subgraph providers["AI Model Providers"]
@@ -209,6 +209,8 @@ This builds the image as `openclaw:latest` with the following tools baked in:
 | `jq` | 1.6 | JSON processing |
 | `git` | (apt) | Git operations for the mandatory git workflow |
 | `gh` | (apt) | GitHub CLI for issues, PRs, and repo cloning |
+| `tmux` | (apt) | TTY emulation for Cursor CLI automation |
+| `agent` (Cursor CLI) | (install script) | AI-assisted code generation for cursor-agent |
 
 To use a custom tag:
 
@@ -234,6 +236,7 @@ Add the following secrets to Infisical under **homelab / prod**:
 | `VIKUNJA_API_TOKEN` | From Vikunja UI → Settings → API Tokens → Create Token | Yes (for Vikunja task management integration) |
 | `DISCORD_WEBHOOK_VIKUNJA` | From Discord `#daily-briefing` channel → Integrations → Webhooks | Yes (for daily briefing + task notifications) |
 | `DISCORD_WEBHOOK_ALERTS` | From Discord `#alerts` channel → Integrations → Webhooks | Yes (for cluster health alerts + incident notifications) |
+| `CURSOR_API_KEY` | From Cursor account settings (API key for headless CLI auth) | Yes (for cursor-agent code generation) |
 
 After adding secrets, ESO syncs them into the `openclaw-secret` K8s Secret within the `refreshInterval` (1 hour), or force an immediate sync:
 
@@ -813,7 +816,7 @@ The `openclaw.json` config (in `configmap.yaml`) contains these key settings:
 
 ## Multi-Agent & Skills Architecture
 
-OpenClaw runs six agents with the orchestrator pattern: a default `homelab-admin` agent that delegates to specialized sub-agents.
+OpenClaw runs six agents in a two-tier hierarchy: a `homelab-admin` orchestrator, a `cursor-agent` senior lead (with PR review authority and sub-agent spawning), and four junior specialist agents.
 
 ```mermaid
 flowchart TD
@@ -823,19 +826,23 @@ flowchart TD
     end
 
     HA["homelab-admin\n(Orchestrator)"]
-    DS["devops-sre\n(Infrastructure)"]
-    SE["software-engineer\n(Development)"]
-    SA["security-analyst\n(Security)"]
-    QA["qa-tester\n(QA/Testing)"]
-    CA["cursor-agent\n(Code Generation)"]
+    CA["cursor-agent\n(Senior Lead)"]
+    DS["devops-sre\n(Junior)"]
+    SE["software-engineer\n(Junior)"]
+    SA["security-analyst\n(Junior)"]
+    QA["qa-tester\n(Junior)"]
 
+    HA -- "sessions_spawn" --> CA
     HA -- "sessions_spawn" --> DS
     HA -- "sessions_spawn" --> SE
     HA -- "sessions_spawn" --> SA
     HA -- "sessions_spawn" --> QA
-    HA -- "sessions_spawn" --> CA
+    CA -- "spawn + review" --> DS
+    CA -- "spawn + review" --> SE
+    CA -- "spawn + review" --> SA
+    CA -- "spawn + review" --> QA
 
-    HA & DS & SE & SA & QA & CA --> OpenRouterM
+    HA & CA & DS & SE & SA & QA --> OpenRouterM
     OpenRouterM -. "fallback" .-> GeminiM
 
     subgraph skills["Skills (/skills)"]
@@ -854,34 +861,34 @@ flowchart TD
     end
 
     HA --> S1 & S5 & S6 & S8 & S10 & S11 & S12
+    CA --> S9 & S5 & S3 & S4 & S7
     DS --> S2 & S5 & S6 & S8
     SE --> S3 & S5
     SA --> S4 & S5 & S6
     QA --> S7 & S5 & S6 & S8
-    CA --> S9 & S5
 ```
 
 Each agent has a `skills` allowlist in the configmap that restricts which skills it can see (omit = all skills; empty array = none):
 
-| Agent | Assigned Skills |
-|---|---|
-| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
-| `devops-sre` | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
-| `software-engineer` | `software-engineer`, `gitops` |
-| `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
-| `qa-tester` | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
-| `cursor-agent` | `cursor-agent`, `gitops` |
+| Agent | Tier | Assigned Skills |
+|---|---|---|
+| `homelab-admin` | Orchestrator | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
+| `cursor-agent` | Senior lead | `cursor-agent`, `gitops`, `software-engineer`, `security-analyst`, `qa-tester` |
+| `devops-sre` | Junior | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
+| `software-engineer` | Junior | `software-engineer`, `gitops` |
+| `security-analyst` | Junior | `security-analyst`, `gitops`, `secret-management` |
+| `qa-tester` | Junior | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
 
 ### Agents
 
-| Agent ID | Role | Workspace |
-|---|---|---|
-| `homelab-admin` | Default orchestrator — coordinates tasks, delegates to sub-agents | `/data/workspaces/homelab-admin` |
-| `devops-sre` | Infrastructure, K8s ops, Terraform, incident response | `/data/workspaces/devops-sre` |
-| `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
-| `security-analyst` | Security audits, vulnerability assessment, hardening | `/data/workspaces/security-analyst` |
-| `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
-| `cursor-agent` | AI-assisted code generation via Cursor CLI | `/data/workspaces/cursor-agent` |
+| Agent ID | Tier | Role | Workspace |
+|---|---|---|---|
+| `homelab-admin` | Orchestrator | Default entry point — coordinates tasks, delegates to all agents | `/data/workspaces/homelab-admin` |
+| `cursor-agent` | Senior lead | AI-assisted code gen via Cursor CLI, PR review authority, technical direction, can spawn junior agents | `/data/workspaces/cursor-agent` |
+| `devops-sre` | Junior | Infrastructure, K8s ops, Terraform, incident response | `/data/workspaces/devops-sre` |
+| `software-engineer` | Junior | Code development, testing | `/data/workspaces/software-engineer` |
+| `security-analyst` | Junior | Security audits, vulnerability assessment, hardening | `/data/workspaces/security-analyst` |
+| `qa-tester` | Junior | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
 
 Every agent has an explicit object-form `model` in the configmap (see [Model config convention](#model-config-convention-important)):
 

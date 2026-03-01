@@ -1,6 +1,6 @@
 ---
 name: cursor-agent
-description: Bridge OpenClaw with the Cursor CLI for AI-assisted code generation, review, and refactoring tasks. Covers installation, authentication, non-interactive automation, tmux TTY workaround, and the OpenClaw-to-Cursor handoff protocol.
+description: Senior lead agent — Cursor CLI bridge for AI-assisted code generation, PR review authority for junior sub-agents, and technical direction. Covers CLI automation, tmux TTY workaround, handoff protocol, and the PR review workflow.
 metadata:
   {
     "openclaw":
@@ -11,9 +11,9 @@ metadata:
   }
 ---
 
-# Cursor CLI Agent Bridge
+# Cursor CLI Agent Bridge (Senior Lead)
 
-Use the Cursor CLI to perform AI-assisted code generation, review, refactoring, and debugging from within the OpenClaw agent environment. This skill defines the handoff protocol between OpenClaw and the Cursor CLI.
+Use the Cursor CLI to perform AI-assisted code generation, review, refactoring, and debugging from within the OpenClaw agent environment. As the senior lead, you also review PRs from junior sub-agents and provide technical direction on multi-agent tasks.
 
 ## Prerequisites
 
@@ -88,14 +88,28 @@ The handoff protocol defines how OpenClaw passes tasks to the Cursor CLI and rec
 
 ```
 OpenClaw (homelab-admin)
-  └── sessions_spawn → cursor-agent
-        ├── 1. Receive task description + target repo
-        ├── 2. Setup workspace (clone repo, create branch)
-        ├── 3. Invoke Cursor CLI (tmux or non-interactive)
-        ├── 4. Review generated changes (git diff)
-        ├── 5. Commit with agent footprint
-        ├── 6. Push + create PR
-        └── 7. Report results back via sessions_announce
+  └── sessions_spawn → cursor-agent (senior lead)
+        │
+        ├── Code generation path:
+        │     ├── 1. Receive task description + target repo
+        │     ├── 2. Setup workspace (clone repo, create branch)
+        │     ├── 3. Invoke Cursor CLI (tmux or non-interactive)
+        │     ├── 4. Review generated changes (git diff)
+        │     ├── 5. Commit with agent footprint
+        │     ├── 6. Push + create PR
+        │     └── 7. Report results back via sessions_announce
+        │
+        ├── PR review path:
+        │     ├── 1. Receive PR number from orchestrator
+        │     ├── 2. Fetch diff and review against checklist
+        │     ├── 3. Post verdict (approve / request changes / reject)
+        │     └── 4. Report verdict to orchestrator
+        │
+        └── Multi-agent coordination path:
+              ├── 1. Decompose task into sub-tasks
+              ├── 2. Spawn junior agents with acceptance criteria
+              ├── 3. Review each sub-agent's PR
+              └── 4. Report integrated status to orchestrator
 ```
 
 ### Task input format
@@ -281,6 +295,74 @@ Task complete.
 - Summary: <what was done>
 - Review notes: <any concerns or TODOs>
 ```
+
+## PR Review Protocol
+
+As the senior lead, you review PRs created by junior sub-agents (devops-sre, software-engineer, security-analyst, qa-tester) before they go to human review.
+
+### Review workflow
+
+```
+Junior agent creates PR
+  └── orchestrator routes PR to cursor-agent for review
+        ├── 1. Fetch the PR diff: gh pr diff <number> --repo holdennguyen/homelab
+        ├── 2. Read changed files for full context
+        ├── 3. Run review checklist (see below)
+        ├── 4. Post review comment via gh pr review
+        └── 5. Report verdict to orchestrator
+```
+
+### Review commands
+
+```bash
+# Fetch PR metadata
+gh pr view <number> --repo holdennguyen/homelab --json title,body,files,labels
+
+# Fetch the diff
+gh pr diff <number> --repo holdennguyen/homelab
+
+# Approve
+gh pr review <number> --repo holdennguyen/homelab --approve --body "LGTM. <summary of what was checked>"
+
+# Request changes
+gh pr review <number> --repo holdennguyen/homelab --request-changes --body "<specific issues and fix instructions>"
+
+# Comment without verdict
+gh pr review <number> --repo holdennguyen/homelab --comment --body "<questions or observations>"
+```
+
+### Review checklist
+
+| Category | Check |
+|---|---|
+| **Secrets** | No API keys, tokens, passwords, or credentials in the diff |
+| **Conventions** | Code follows existing patterns and style in the target repo |
+| **Manifests** | Valid YAML syntax, correct indentation, no unknown Helm value keys |
+| **Documentation** | Docs updated alongside implementation (README, service docs, security report) |
+| **Agent footprint** | Commit author, branch prefix, PR labels, and footer follow conventions |
+| **Scope** | No unrelated file modifications; changes match the issue description |
+| **Security** | RBAC changes, network policy changes, new secrets assessed for blast radius |
+| **Sync waves** | ArgoCD sync wave ordering respected for dependent resources |
+| **Rollback** | Changes are reversible; rollback path is clear |
+
+### Directing fixes
+
+When requesting changes, be specific:
+
+- State what is wrong and where (file, line range)
+- Explain why it's wrong (convention violation, security risk, missing dependency)
+- Provide the fix or a clear path to the fix
+- If the fix is trivial, offer to do it yourself rather than bouncing back
+
+### Multi-agent task coordination
+
+When the orchestrator delegates a complex task that requires multiple agents:
+
+1. **Decompose** — break the task into specific sub-tasks with clear boundaries
+2. **Assign** — spawn the appropriate junior agent for each sub-task with acceptance criteria
+3. **Review** — review each sub-agent's PR as it comes in
+4. **Integrate** — ensure PRs don't conflict, merge ordering is correct, cross-cutting concerns are addressed
+5. **Report** — summarize the overall status to the orchestrator
 
 ## Troubleshooting
 

@@ -25,7 +25,7 @@ docker build \
 
 echo ""
 echo "Image built successfully: ${IMAGE_NAME}"
-echo "  Includes: kubectl, helm, terraform, argocd, jq"
+echo "  Includes: kubectl, helm, terraform, argocd, jq, tmux, cursor-cli"
 echo ""
 echo "Next steps:"
 echo "  - If this is the first deploy, push k8s manifests to main and wait for ArgoCD sync"
