@@ -36,7 +36,12 @@ RUN curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/te
 RUN curl -fsSL "https://github.com/argoproj/argo-cd/releases/download/v${ARGOCD_VERSION}/argocd-linux-${TARGETARCH}" \
       -o /usr/local/bin/argocd && chmod +x /usr/local/bin/argocd
 
-RUN curl -fsSL https://www.cursor.com/install.sh 2>/dev/null | bash 2>/dev/null || \
-    echo "WARN: Cursor CLI auto-install unavailable for this platform; install manually post-deploy"
+ARG CURSOR_AGENT_VERSION=2026.02.27-e7d2ef6
+RUN CURSOR_ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/x64/') && \
+    mkdir -p /opt/cursor-agent && \
+    curl -fsSL "https://downloads.cursor.com/lab/${CURSOR_AGENT_VERSION}/linux/${CURSOR_ARCH}/agent-cli-package.tar.gz" \
+      | tar --strip-components=1 -xzf - -C /opt/cursor-agent && \
+    chmod +x /opt/cursor-agent/cursor-agent && \
+    ln -s /opt/cursor-agent/cursor-agent /usr/local/bin/agent
 
 USER node
