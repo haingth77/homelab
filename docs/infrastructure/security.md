@@ -283,7 +283,7 @@ The `GITHUB_TOKEN` is the most sensitive credential from a blast-radius perspect
 - Cannot manage repository settings, webhooks, or deploy keys
 - Write access is limited to code (branches/PRs), issues, and pull requests
 
-All four secrets are also readable via `kubectl get secret openclaw-secret -n openclaw` due to the RBAC `secrets` read permission. Any process running inside the container can access them through the environment.
+All seven secrets are also readable via `kubectl get secret openclaw-secret -n openclaw` due to the RBAC `secrets` read permission. Any process running inside the container can access them through the environment.
 
 ### Host Filesystem Access
 
@@ -345,15 +345,16 @@ The gateway starts with `--allow-unconfigured`, which permits connections from a
 
 ### Agent Capabilities
 
-OpenClaw runs five agents in an orchestrator pattern:
+OpenClaw runs six agents in an orchestrator pattern:
 
 | Agent | Skills | Can Delegate To |
 |---|---|---|
-| `homelab-admin` (orchestrator) | homelab-admin, gitops, secret-management, incident-response, vikunja | devops-sre, software-engineer, security-analyst, qa-tester |
+| `homelab-admin` (orchestrator) | homelab-admin, gitops, secret-management, incident-response, vikunja | devops-sre, software-engineer, security-analyst, qa-tester, cursor-agent |
 | `devops-sre` | devops-sre, gitops, secret-management, incident-response | software-engineer, security-analyst, qa-tester |
 | `software-engineer` | software-engineer | devops-sre, security-analyst, qa-tester |
 | `security-analyst` | security-analyst, secret-management | devops-sre, software-engineer, qa-tester |
 | `qa-tester` | qa-tester, gitops, incident-response | devops-sre, software-engineer |
+| `cursor-agent` | cursor-agent, gitops | — |
 
 **Spawning limits:**
 

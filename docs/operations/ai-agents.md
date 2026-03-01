@@ -28,10 +28,12 @@ flowchart TD
         SE["software-engineer"]
         SA["security-analyst"]
         QA["qa-tester"]
+        CA["cursor-agent"]
         HA -->|"sessions_spawn"| DS
         HA -->|"sessions_spawn"| SE
         HA -->|"sessions_spawn"| SA
         HA -->|"sessions_spawn"| QA
+        HA -->|"sessions_spawn"| CA
     end
 
     subgraph models ["Model Providers"]
@@ -86,7 +88,7 @@ autoAttach:
 
 ## OpenClaw Agents
 
-OpenClaw runs five agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
+OpenClaw runs six agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
 
 | Agent | Role | Workspace |
 |---|---|---|
@@ -95,6 +97,7 @@ OpenClaw runs five agents in an orchestrator pattern. The `homelab-admin` agent 
 | `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
 | `security-analyst` | Security audits, hardening | `/data/workspaces/security-analyst` |
 | `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
+| `cursor-agent` | AI-assisted code generation via Cursor CLI | `/data/workspaces/cursor-agent` |
 
 Every agent has an explicit object-form `model` with `{ primary, fallbacks }` in the configmap:
 
@@ -109,7 +112,7 @@ When the primary fails or hits rate limits, OpenClaw falls through to Gemini. Au
 
 ### How the Orchestrator Works
 
-Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the sole agent with `"default": true` in the config. The other three agents are sub-agents — they don't appear in the UI dropdown and can only be spawned by the orchestrator.
+Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the sole agent with `"default": true` in the config. The other five agents are sub-agents — they don't appear in the UI dropdown and can only be spawned by the orchestrator.
 
 **Delegation rules:**
 
@@ -119,6 +122,7 @@ Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the s
 | Code changes, feature development, code review, testing | `software-engineer` | "Update the Dockerfile to add a new tool" |
 | Security audits, vulnerability assessment, hardening | `security-analyst` | "Audit the RBAC configuration" |
 | Deployment validation, regression testing, health checks | `qa-tester` | "Verify all services are healthy after the merge" |
+| AI-assisted code generation, Cursor CLI tasks | `cursor-agent` | "Generate a Python script that validates YAML files" |
 | Read-only checks, status queries, simple answers | `homelab-admin` (handles directly) | "What pods are running?" |
 
 When delegating, `homelab-admin` uses `sessions_spawn` and provides:
@@ -129,6 +133,47 @@ When delegating, `homelab-admin` uses `sessions_spawn` and provides:
 
 The spawned sub-agent session appears in the UI sidebar. Sub-agents report results back via `sessions_announce`.
 
+### Cursor Agent Handoff Protocol
+
+The `cursor-agent` is unique among sub-agents: it bridges OpenClaw's orchestration layer with the Cursor CLI to perform AI-assisted code generation. Instead of directly editing files, it invokes the Cursor CLI (either non-interactively or via tmux) and reviews the generated output before committing.
+
+```mermaid
+sequenceDiagram
+    participant HA as homelab-admin<br/>(Orchestrator)
+    participant CA as cursor-agent<br/>(OpenClaw sub-agent)
+    participant CLI as Cursor CLI<br/>(agent command)
+    participant GH as GitHub
+
+    HA->>CA: sessions_spawn with task context<br/>(description, repo, files, constraints)
+    CA->>CA: Clone/update repo, create branch,<br/>set git identity
+    CA->>CLI: agent -p 'prompt' --force<br/>(or tmux session for complex tasks)
+    CLI-->>CA: Generated code changes
+    CA->>CA: Review diff: no secrets,<br/>style check, test coverage
+    alt Quality OK
+        CA->>GH: git commit + push + gh pr create
+        GH-->>CA: PR URL
+        CA-->>HA: sessions_announce: PR URL + summary
+    else Quality concerns
+        CA-->>HA: Report issues, request guidance
+    end
+```
+
+**Execution modes** (selected by task complexity):
+
+| Complexity | Mode | Command |
+|---|---|---|
+| Simple, single-file | Non-interactive | `agent -p '<prompt>' --force` |
+| Multi-file, needs context | Non-interactive with `@file` refs | `agent -p '<prompt>' --force` |
+| Iterative, needs refinement | tmux automation | `tmux` session with interactive `agent` |
+
+**Prerequisites** (follow-up work, not yet in the Docker image):
+
+- Cursor CLI (`agent` command) must be installed in the OpenClaw container image
+- `tmux` must be installed for complex task execution
+- `CURSOR_API_KEY` secret must be added to Infisical and wired through ESO
+
+See the `cursor-agent` skill (`skills/cursor-agent/SKILL.md`) for the full CLI reference, tmux automation patterns, and troubleshooting guide.
+
 ### Mandatory Git Workflow
 
 ALL agents enforce a mandatory git workflow for any change to the homelab repository. No agent — including the orchestrator — pushes directly to `main`. Branch protection is enforced on `main`: PRs require at least one approving review, force pushes are blocked, and linear history is required.
@@ -137,7 +182,7 @@ ALL agents enforce a mandatory git workflow for any change to the homelab reposi
 sequenceDiagram
     participant User
     participant HA as homelab-admin<br/>(Orchestrator)
-    participant SA as Sub-agent<br/>(devops-sre / software-engineer /<br/>security-analyst / qa-tester)
+    participant SA as Sub-agent<br/>(devops-sre / software-engineer /<br/>security-analyst / qa-tester / cursor-agent)
     participant GH as GitHub
     participant Argo as ArgoCD
 
@@ -179,7 +224,7 @@ Every issue and PR created by agents MUST be labeled. Labels serve as the tracki
 
 | Category | Labels | Rule |
 |---|---|---|
-| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst`, `agent:qa-tester` | Exactly one — who is working on this |
+| **Agent** | `agent:homelab-admin`, `agent:devops-sre`, `agent:software-engineer`, `agent:security-analyst`, `agent:qa-tester`, `agent:cursor-agent` | Exactly one — who is working on this |
 | **Type** | `type:feat`, `type:fix`, `type:chore`, `type:docs`, `type:refactor`, `type:security` | Exactly one — what kind of change |
 | **Area** | `area:k8s`, `area:terraform`, `area:argocd`, `area:secrets`, `area:monitoring`, `area:networking`, `area:openclaw`, `area:auth` | One or more — what part of the homelab |
 | **Priority** | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | Exactly one — urgency |
@@ -305,6 +350,7 @@ Each agent has a `skills` allowlist in the configmap that restricts which skills
 | `software-engineer` | `software-engineer`, `gitops` |
 | `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
 | `qa-tester` | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
+| `cursor-agent` | `cursor-agent`, `gitops` |
 
 All agents get the `gitops` skill for the mandatory git workflow. Cross-cutting skills (e.g. `secret-management`) are shared across agents that need them.
 
@@ -345,6 +391,7 @@ Skills provide domain-specific knowledge and commands to agents. They live in `s
 | `gitops` | ArgoCD App of Apps pattern, sync management, mandatory git workflow reference |
 | `incident-response` | Incident triage, rollback procedures, pre-merge validation, post-incident documentation |
 | `secret-management` | Infisical → ESO → K8s pipeline operations |
+| `cursor-agent` | Cursor CLI bridge: installation, automation, handoff protocol, code generation workflows |
 | `vikunja` | Vikunja task management API — CRUD tasks, Discord notifications, daily routine (project 2), journal (project 3) with check-ins/reflections, schedule-aware task management |
 | `daily-briefing` | AI morning briefing — weather, tasks, journal-driven advice, owner health profile, weekly schedule with nutrition targets |
 | `weather` | Real-time weather via Open-Meteo and wttr.in (no API key required) |

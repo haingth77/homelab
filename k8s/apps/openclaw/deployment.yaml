@@ -31,7 +31,7 @@ spec:
             - sh
             - -c
             - |
-              for agent in homelab-admin devops-sre software-engineer security-analyst qa-tester; do
+              for agent in homelab-admin devops-sre software-engineer security-analyst qa-tester cursor-agent; do
                 dir="/data/workspaces/${agent}"
                 mkdir -p "${dir}"
                 src="/workspace-src/${agent}/AGENTS.md"
