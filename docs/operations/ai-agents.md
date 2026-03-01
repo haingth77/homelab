@@ -24,16 +24,20 @@ flowchart TD
 
     subgraph openclaw ["OpenClaw (K8s pod)"]
         HA["homelab-admin\n(orchestrator)"]
-        DS["devops-sre"]
-        SE["software-engineer"]
-        SA["security-analyst"]
-        QA["qa-tester"]
-        CA["cursor-agent"]
+        CA["cursor-agent\n(senior lead)"]
+        DS["devops-sre\n(junior)"]
+        SE["software-engineer\n(junior)"]
+        SA["security-analyst\n(junior)"]
+        QA["qa-tester\n(junior)"]
+        HA -->|"sessions_spawn"| CA
         HA -->|"sessions_spawn"| DS
         HA -->|"sessions_spawn"| SE
         HA -->|"sessions_spawn"| SA
         HA -->|"sessions_spawn"| QA
-        HA -->|"sessions_spawn"| CA
+        CA -->|"sessions_spawn\n+ review"| DS
+        CA -->|"sessions_spawn\n+ review"| SE
+        CA -->|"sessions_spawn\n+ review"| SA
+        CA -->|"sessions_spawn\n+ review"| QA
     end
 
     subgraph models ["Model Providers"]
@@ -88,16 +92,16 @@ autoAttach:
 
 ## OpenClaw Agents
 
-OpenClaw runs six agents in an orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to specialized sub-agents via `sessions_spawn`.
+OpenClaw runs six agents in a two-tier orchestrator pattern. The `homelab-admin` agent is the only directly accessible agent — it receives all user requests and delegates to sub-agents via `sessions_spawn`. The `cursor-agent` serves as a **senior lead** that can both execute complex tasks and direct junior agents.
 
-| Agent | Role | Workspace |
-|---|---|---|
-| `homelab-admin` | Default orchestrator | `/data/workspaces/homelab-admin` |
-| `devops-sre` | Infrastructure, K8s, Terraform | `/data/workspaces/devops-sre` |
-| `software-engineer` | Code development, review, testing | `/data/workspaces/software-engineer` |
-| `security-analyst` | Security audits, hardening | `/data/workspaces/security-analyst` |
-| `qa-tester` | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
-| `cursor-agent` | AI-assisted code generation via Cursor CLI | `/data/workspaces/cursor-agent` |
+| Agent | Tier | Role | Workspace |
+|---|---|---|---|
+| `homelab-admin` | Orchestrator | Default entry point, delegates to all agents | `/data/workspaces/homelab-admin` |
+| `cursor-agent` | Senior lead | AI-assisted code gen via Cursor CLI, PR review authority, technical direction | `/data/workspaces/cursor-agent` |
+| `devops-sre` | Junior | Infrastructure, K8s, Terraform | `/data/workspaces/devops-sre` |
+| `software-engineer` | Junior | Code development, testing | `/data/workspaces/software-engineer` |
+| `security-analyst` | Junior | Security audits, hardening | `/data/workspaces/security-analyst` |
+| `qa-tester` | Junior | Deployment validation, service health testing, regression checks | `/data/workspaces/qa-tester` |
 
 Every agent has an explicit object-form `model` with `{ primary, fallbacks }` in the configmap:
 
@@ -118,11 +122,13 @@ Users interact only with `homelab-admin` in the OpenClaw Control UI. It is the s
 
 | Request type | Delegated to | Example |
 |---|---|---|
-| Infrastructure changes, Terraform, K8s ops, monitoring | `devops-sre` | "Add a NodePort to the monitoring stack" |
-| Code changes, feature development, code review, testing | `software-engineer` | "Update the Dockerfile to add a new tool" |
-| Security audits, vulnerability assessment, hardening | `security-analyst` | "Audit the RBAC configuration" |
-| Deployment validation, regression testing, health checks | `qa-tester` | "Verify all services are healthy after the merge" |
-| AI-assisted code generation, Cursor CLI tasks | `cursor-agent` | "Generate a Python script that validates YAML files" |
+| Complex code generation, multi-file refactors | `cursor-agent` (senior) | "Generate a Python script that validates YAML files" |
+| Multi-agent coordinated tasks | `cursor-agent` (senior, decomposes + directs) | "Refactor the monitoring stack and update all docs" |
+| PR review for junior agent output | `cursor-agent` (senior) | "Review the devops-sre PR for the new NetworkPolicy" |
+| Infrastructure changes, Terraform, K8s ops, monitoring | `devops-sre` (junior) | "Add a NodePort to the monitoring stack" |
+| Code changes, feature development, testing | `software-engineer` (junior) | "Update the Dockerfile to add a new tool" |
+| Security audits, vulnerability assessment, hardening | `security-analyst` (junior) | "Audit the RBAC configuration" |
+| Deployment validation, regression testing, health checks | `qa-tester` (junior) | "Verify all services are healthy after the merge" |
 | Read-only checks, status queries, simple answers | `homelab-admin` (handles directly) | "What pods are running?" |
 
 When delegating, `homelab-admin` uses `sessions_spawn` and provides:
@@ -133,9 +139,9 @@ When delegating, `homelab-admin` uses `sessions_spawn` and provides:
 
 The spawned sub-agent session appears in the UI sidebar. Sub-agents report results back via `sessions_announce`.
 
-### Cursor Agent Handoff Protocol
+### Cursor Agent — Senior Lead & Handoff Protocol
 
-The `cursor-agent` is unique among sub-agents: it bridges OpenClaw's orchestration layer with the Cursor CLI to perform AI-assisted code generation. Instead of directly editing files, it invokes the Cursor CLI (either non-interactively or via tmux) and reviews the generated output before committing.
+The `cursor-agent` is the **senior lead** in the agent hierarchy. It has three responsibilities: (1) AI-assisted code generation via the Cursor CLI, (2) PR review authority for junior agent output, and (3) technical direction on multi-agent tasks. It can spawn and direct junior agents (`devops-sre`, `software-engineer`, `security-analyst`, `qa-tester`) independently.
 
 ```mermaid
 sequenceDiagram
@@ -166,11 +172,11 @@ sequenceDiagram
 | Multi-file, needs context | Non-interactive with `@file` refs | `agent -p '<prompt>' --force` |
 | Iterative, needs refinement | tmux automation | `tmux` session with interactive `agent` |
 
-**Prerequisites** (follow-up work, not yet in the Docker image):
+**Prerequisites** (included in the Docker image):
 
-- Cursor CLI (`agent` command) must be installed in the OpenClaw container image
-- `tmux` must be installed for complex task execution
-- `CURSOR_API_KEY` secret must be added to Infisical and wired through ESO
+- Cursor CLI (`agent` command) — installed via install script in `Dockerfile.openclaw`
+- `tmux` — installed for complex task execution
+- `CURSOR_API_KEY` — synced from Infisical via ESO into `openclaw-secret`
 
 See the `cursor-agent` skill (`skills/cursor-agent/SKILL.md`) for the full CLI reference, tmux automation patterns, and troubleshooting guide.
 
@@ -343,14 +349,14 @@ The container image (`Dockerfile.openclaw`) includes ops tools (kubectl, helm, t
 
 Each agent has a `skills` allowlist in the configmap that restricts which skills it can see. Omitting the field means all skills; an empty array means none.
 
-| Agent | Assigned Skills |
-|---|---|
-| `homelab-admin` | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
-| `devops-sre` | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
-| `software-engineer` | `software-engineer`, `gitops` |
-| `security-analyst` | `security-analyst`, `gitops`, `secret-management` |
-| `qa-tester` | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
-| `cursor-agent` | `cursor-agent`, `gitops` |
+| Agent | Tier | Assigned Skills |
+|---|---|---|
+| `homelab-admin` | Orchestrator | `homelab-admin`, `gitops`, `secret-management`, `incident-response`, `vikunja`, `daily-briefing`, `weather` |
+| `cursor-agent` | Senior lead | `cursor-agent`, `gitops`, `software-engineer`, `security-analyst`, `qa-tester` |
+| `devops-sre` | Junior | `devops-sre`, `gitops`, `secret-management`, `incident-response` |
+| `software-engineer` | Junior | `software-engineer`, `gitops` |
+| `security-analyst` | Junior | `security-analyst`, `gitops`, `secret-management` |
+| `qa-tester` | Junior | `qa-tester`, `gitops`, `secret-management`, `incident-response` |
 
 All agents get the `gitops` skill for the mandatory git workflow. Cross-cutting skills (e.g. `secret-management`) are shared across agents that need them.
 

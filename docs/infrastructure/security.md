@@ -149,7 +149,7 @@ flowchart LR
 
 | ExternalSecret | Namespace | Keys |
 |---|---|---|
-| `openclaw-secret` | `openclaw` | `OPENCLAW_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GITHUB_TOKEN`, `DISCORD_BOT_TOKEN`, `VIKUNJA_API_TOKEN`, `DISCORD_WEBHOOK_VIKUNJA` |
+| `openclaw-secret` | `openclaw` | `OPENCLAW_GATEWAY_TOKEN`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GITHUB_TOKEN`, `DISCORD_BOT_TOKEN`, `VIKUNJA_API_TOKEN`, `DISCORD_WEBHOOK_VIKUNJA`, `CURSOR_API_KEY` |
 | `authentik-secret` | `authentik` | `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_BOOTSTRAP_PASSWORD`, `AUTHENTIK_BOOTSTRAP_TOKEN`, `AUTHENTIK_POSTGRES_PASSWORD` |
 | `grafana-secret` | `monitoring` | `GRAFANA_ADMIN_PASSWORD`, `GRAFANA_OAUTH_CLIENT_SECRET` |
 | `vikunja-db-secret` | `vikunja` | `VIKUNJA_POSTGRES_USER`, `VIKUNJA_POSTGRES_PASSWORD`, `VIKUNJA_POSTGRES_DB`, `VIKUNJA_OIDC_CLIENT_SECRET` |
@@ -264,7 +264,7 @@ This design allows the agent to **monitor everything, operate on running workloa
 
 ### Secrets Accessible
 
-Seven secrets are injected as environment variables into the OpenClaw container:
+Eight secrets are injected as environment variables into the OpenClaw container:
 
 | Secret Key | Purpose | Scope |
 |---|---|---|
@@ -275,6 +275,7 @@ Seven secrets are injected as environment variables into the OpenClaw container:
 | `DISCORD_BOT_TOKEN` | Discord bot for chat-based agent interaction | Discord application bot user |
 | `VIKUNJA_API_TOKEN` | Vikunja task management API access | Vikunja instance (task CRUD) |
 | `DISCORD_WEBHOOK_VIKUNJA` | Discord webhook for Vikunja task notifications | Single Discord channel |
+| `CURSOR_API_KEY` | Cursor CLI authentication for headless code generation | Cursor account (AI-assisted coding) |
 
 The `GITHUB_TOKEN` is the most sensitive credential from a blast-radius perspective. Its scope is intentionally narrow:
 
@@ -283,7 +284,7 @@ The `GITHUB_TOKEN` is the most sensitive credential from a blast-radius perspect
 - Cannot manage repository settings, webhooks, or deploy keys
 - Write access is limited to code (branches/PRs), issues, and pull requests
 
-All seven secrets are also readable via `kubectl get secret openclaw-secret -n openclaw` due to the RBAC `secrets` read permission. Any process running inside the container can access them through the environment.
+All eight secrets are also readable via `kubectl get secret openclaw-secret -n openclaw` due to the RBAC `secrets` read permission. Any process running inside the container can access them through the environment.
 
 ### Host Filesystem Access
 
@@ -345,16 +346,16 @@ The gateway starts with `--allow-unconfigured`, which permits connections from a
 
 ### Agent Capabilities
 
-OpenClaw runs six agents in an orchestrator pattern:
+OpenClaw runs six agents in a two-tier orchestrator pattern (1 orchestrator, 1 senior lead, 4 junior agents):
 
 | Agent | Skills | Can Delegate To |
 |---|---|---|
-| `homelab-admin` (orchestrator) | homelab-admin, gitops, secret-management, incident-response, vikunja | devops-sre, software-engineer, security-analyst, qa-tester, cursor-agent |
-| `devops-sre` | devops-sre, gitops, secret-management, incident-response | software-engineer, security-analyst, qa-tester |
-| `software-engineer` | software-engineer | devops-sre, security-analyst, qa-tester |
-| `security-analyst` | security-analyst, secret-management | devops-sre, software-engineer, qa-tester |
-| `qa-tester` | qa-tester, gitops, incident-response | devops-sre, software-engineer |
-| `cursor-agent` | cursor-agent, gitops | — |
+| `homelab-admin` (orchestrator) | homelab-admin, gitops, secret-management, incident-response, vikunja | cursor-agent, devops-sre, software-engineer, security-analyst, qa-tester |
+| `cursor-agent` (senior lead) | cursor-agent, gitops, software-engineer, security-analyst, qa-tester | devops-sre, software-engineer, security-analyst, qa-tester |
+| `devops-sre` (junior) | devops-sre, gitops, secret-management, incident-response | — |
+| `software-engineer` (junior) | software-engineer, gitops | — |
+| `security-analyst` (junior) | security-analyst, gitops, secret-management | — |
+| `qa-tester` (junior) | qa-tester, gitops, secret-management, incident-response | — |
 
 **Spawning limits:**
 
@@ -463,7 +464,7 @@ flowchart TD
 | **Non-root execution** | Pod runs as UID 1000 with `runAsNonRoot: true` | Cannot escalate to root inside the container, cannot modify system binaries, cannot change container network config |
 | **Targeted RBAC (no cluster-admin)** | ClusterRole grants cluster-wide read + scoped operational writes (restart, scale, annotate). Namespace Role grants secrets read + pods/exec in `openclaw` only | Cannot create or delete deployments, services, or namespaces. Cannot read secrets outside `openclaw`. Cannot modify ClusterRoles, NetworkPolicies, or RBAC resources. Cannot exec into pods in other namespaces |
 | **Network policies** | Default-deny with explicit allowlist: DNS, K8s API (:6443), Tailscale ingress (:18789), internet egress (:443), Vikunja egress (:3456) | Cannot reach other namespaces' pods over the network except Vikunja (declarative intent — enforcement depends on CNI). Cannot open arbitrary ports. Cannot reach macOS services on the host network (except through the K8s API server) |
-| **Secret scoping** | Only `openclaw-secret` is injected (7 keys). Infisical stores all other secrets in separate ExternalSecrets per namespace | Cannot read Authentik passwords, Grafana credentials, PostgreSQL passwords, or any secret outside its namespace |
+| **Secret scoping** | Only `openclaw-secret` is injected (8 keys). Infisical stores all other secrets in separate ExternalSecrets per namespace | Cannot read Authentik passwords, Grafana credentials, PostgreSQL passwords, or any secret outside its namespace |
 | **GitHub token scope** | Fine-grained PAT: only `holdennguyen/homelab`, only code/issues/PRs | Cannot access other repos, cannot modify repo settings/webhooks, cannot access GitHub account settings, cannot read private repos beyond `homelab` |
 | **Git workflow guardrails** | Branch protection on `main` requires PR + human review | Cannot push directly to `main`, cannot merge without human approval, cannot bypass branch protection |
 
@@ -476,7 +477,7 @@ To be precise about the actual attack surface:
 | Its own container filesystem (`/data`, `/tmp`, etc.) | Read-write | Low — only agent workspace data, no personal files |
 | `agents/workspaces/*.md` via hostPath | Read-only | Minimal — only Markdown personality files |
 | `skills/*.md` via hostPath | Read-only | Minimal — only skill definition Markdown files |
-| `openclaw-secret` (7 keys) | Read via env vars and `kubectl get secret` | Medium — LLM API keys could incur billing; GitHub token scoped to one repo |
+| `openclaw-secret` (8 keys) | Read via env vars and `kubectl get secret` | Medium — LLM API keys could incur billing; GitHub token scoped to one repo; Cursor API key grants AI code generation access |
 | Pods in `openclaw` namespace | Read + exec | Medium — only the OpenClaw pod itself runs there |
 | Pods, deployments, services, events in **all** namespaces | Read-only | Low — monitoring only, cannot modify |
 | Deployments, statefulsets in **all** namespaces | Patch (restart, scale) | Medium — can restart or scale workloads; scaling to 0 is gated by Critical Risk Protocol |

@@ -73,13 +73,35 @@ Everything else — manifest edits, new service deployments, config changes, deb
 
 You handle most tasks directly. Only delegate when a task requires **deep domain expertise** that benefits from a specialist's focus.
 
-- **devops-sre**: Complex Terraform refactoring, deep incident root-cause analysis, monitoring stack configuration
-- **software-engineer**: Non-trivial code changes (OpenClaw source, Dockerfile rewrites, script development)
-- **security-analyst**: Full security audits, CVE assessments, penetration testing, compliance reviews
-- **qa-tester**: Comprehensive regression testing, multi-service validation suites
-- **cursor-agent**: AI-assisted code generation via Cursor CLI (script writing, refactoring, code review)
+### Two-tier agent hierarchy
 
-Use `sessions_spawn` to delegate. Always include in the task context:
+The sub-agents follow a senior/junior model:
+
+**Senior lead — `cursor-agent`:**
+- AI-assisted code generation via Cursor CLI
+- PR review authority for junior agent PRs
+- Technical direction on complex multi-agent tasks
+- Can spawn and direct junior agents independently
+
+**Junior agents — `devops-sre`, `software-engineer`, `security-analyst`, `qa-tester`:**
+- Execute domain-specific implementation tasks
+- Submit PRs for review (routed through cursor-agent when code quality matters)
+- Cannot spawn other agents
+
+### When to route through cursor-agent vs direct
+
+| Scenario | Route | Why |
+|---|---|---|
+| Complex code generation, multi-file refactors | `cursor-agent` directly | Cursor CLI + senior judgment |
+| Multi-agent task needing coordination | `cursor-agent` as lead | Decomposes, assigns, reviews, integrates |
+| Junior agent PR needs code review | `cursor-agent` for review | Quality gate before human review |
+| Simple infra task (restart, scale, config edit) | Junior agent directly | No code review needed |
+| Incident response | `devops-sre` directly | Time-critical, no review gate |
+| Quick validation check | `qa-tester` directly | Read-only, no PR involved |
+
+### Delegation context
+
+Use `sessions_spawn` to delegate. Always include:
 1. The task description and expected outcome
 2. Any relevant file paths or service names
 3. **The existing GitHub issue number** if one exists — prevents duplicate issues
@@ -93,10 +115,11 @@ When delegating (not for every change — only when specialist expertise is need
 
 1. **Analyze** the request — determine if it genuinely needs specialist depth
 2. **Determine labels** — pick the right type, area, and priority labels
-3. **Spawn** the appropriate sub-agent with clear task context including label instructions
-4. The sub-agent follows the `gitops` skill workflow (issue → plan → branch → changes → commit → PR)
-5. **Relay** the PR URL and summary back to the user
-6. **Explain** next steps: "Once merged to `main`, ArgoCD syncs within ~3 minutes"
+3. **Decide routing** — does this need cursor-agent as senior lead, or can a junior handle it directly?
+4. **Spawn** the appropriate agent with clear task context including label instructions
+5. The agent follows the `gitops` skill workflow (issue → plan → branch → changes → commit → PR)
+6. **Relay** the PR URL and summary back to the user
+7. **Explain** next steps: "Once merged to `main`, ArgoCD syncs within ~3 minutes"
 
 ### Delegation decision framework
 
@@ -108,11 +131,12 @@ When delegating (not for every change — only when specialist expertise is need
 
 | Task type | Agent | When to delegate (not always) |
 |---|---|---|
-| Deep Terraform refactoring, complex monitoring pipelines | `devops-sre` | When the work is multi-step and benefits from dedicated SRE focus |
-| Code development, feature implementation | `software-engineer` | When writing non-trivial application code, not simple config edits |
-| Security audits, vulnerability response | `security-analyst` | When a thorough audit or assessment is needed, not routine RBAC tweaks |
-| Comprehensive test campaigns | `qa-tester` | When multi-service regression testing or validation suites are needed |
-| AI-assisted code generation via Cursor CLI | `cursor-agent` | When leveraging Cursor's AI for script writing, refactoring, or bulk code changes |
+| Complex code generation, multi-file refactors, PR review | `cursor-agent` (senior) | When leveraging Cursor CLI or when junior PRs need quality review |
+| Multi-agent coordinated tasks | `cursor-agent` (senior) | When the task needs decomposition, assignment, and integration across agents |
+| Deep Terraform refactoring, complex monitoring pipelines | `devops-sre` (junior) | When the work is multi-step and benefits from dedicated SRE focus |
+| Code development, feature implementation | `software-engineer` (junior) | When writing non-trivial application code, not simple config edits |
+| Security audits, vulnerability response | `security-analyst` (junior) | When a thorough audit or assessment is needed, not routine RBAC tweaks |
+| Comprehensive test campaigns | `qa-tester` (junior) | When multi-service regression testing or validation suites are needed |
 
 Default: handle it yourself. You are the admin. Delegate only when specialist depth genuinely adds value.
 

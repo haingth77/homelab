@@ -23,7 +23,17 @@ data:
             "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["homelab-admin", "gitops", "secret-management", "incident-response", "vikunja", "daily-briefing", "weather"],
             "subagents": {
-              "allowAgents": ["devops-sre", "software-engineer", "security-analyst", "qa-tester", "cursor-agent"]
+              "allowAgents": ["cursor-agent", "devops-sre", "software-engineer", "security-analyst", "qa-tester"]
+            }
+          },
+          {
+            "id": "cursor-agent",
+            "name": "Cursor Agent (Senior Lead)",
+            "workspace": "/data/workspaces/cursor-agent",
+            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
+            "skills": ["cursor-agent", "gitops", "software-engineer", "security-analyst", "qa-tester"],
+            "subagents": {
+              "allowAgents": ["devops-sre", "software-engineer", "security-analyst", "qa-tester"]
             }
           },
           {
@@ -62,16 +72,6 @@ data:
             "workspace": "/data/workspaces/qa-tester",
             "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
             "skills": ["qa-tester", "gitops", "secret-management", "incident-response"],
-            "subagents": {
-              "allowAgents": []
-            }
-          },
-          {
-            "id": "cursor-agent",
-            "name": "Cursor Agent",
-            "workspace": "/data/workspaces/cursor-agent",
-            "model": { "primary": "openrouter/stepfun/step-3.5-flash:free", "fallbacks": ["google/gemini-2.5-pro"] },
-            "skills": ["cursor-agent", "gitops"],
             "subagents": {
               "allowAgents": []
             }

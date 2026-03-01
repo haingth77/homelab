@@ -10,7 +10,7 @@ ARG TARGETARCH=arm64
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      jq ca-certificates git && \
+      jq ca-certificates git tmux && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -35,5 +35,8 @@ RUN curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/te
 
 RUN curl -fsSL "https://github.com/argoproj/argo-cd/releases/download/v${ARGOCD_VERSION}/argocd-linux-${TARGETARCH}" \
       -o /usr/local/bin/argocd && chmod +x /usr/local/bin/argocd
+
+RUN curl -fsSL https://www.cursor.com/install.sh 2>/dev/null | bash 2>/dev/null || \
+    echo "WARN: Cursor CLI auto-install unavailable for this platform; install manually post-deploy"
 
 USER node
