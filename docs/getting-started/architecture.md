@@ -1,5 +1,7 @@
 # Architecture
 
+**Last reviewed:** March 8, 2025 — no changes required; architecture remains current.
+
 This document describes the full architecture of the homelab: how the three infrastructure layers relate to each other, how services are deployed and connected, and how all configuration flows from code to running pods.
 
 ## Overview
