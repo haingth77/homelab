@@ -24,3 +24,4 @@ resources:
   - applications/trivy-dashboard-app.yaml
   - applications/launchfast-app.yaml
   - applications/hello-demo-app.yaml
+  - applications/hello-world-app.yaml
