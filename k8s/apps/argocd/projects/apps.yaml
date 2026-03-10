@@ -25,6 +25,8 @@ spec:
       namespace: trivy-dashboard
     - server: https://kubernetes.default.svc
       namespace: launchfast
+    - server: https://kubernetes.default.svc
+      namespace: hello-world
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
