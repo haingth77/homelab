@@ -15,7 +15,7 @@ data:
         attrs:
           name: Infisical
           group: Infrastructure
-          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8445
+          meta_launch_url: https://hardy-mac-mini.folk-adelie.ts.net:8445
           meta_icon: https://avatars.githubusercontent.com/u/107880645?s=48&v=4
           meta_description: Secret Management Platform
           meta_publisher: Homelab
@@ -39,7 +39,7 @@ data:
         attrs:
           name: Trivy Dashboard
           group: Security
-          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8448
+          meta_launch_url: https://hardy-mac-mini.folk-adelie.ts.net:8448
           meta_icon: https://avatars.githubusercontent.com/u/12783832?s=48&v=4
           meta_description: Trivy Operator Security Dashboard
           meta_publisher: Homelab
@@ -51,7 +51,7 @@ data:
         attrs:
           name: OpenClaw
           group: AI
-          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8447
+          meta_launch_url: https://hardy-mac-mini.folk-adelie.ts.net:8447
           meta_icon: https://avatars.githubusercontent.com/u/252820863?s=48&v=4
           meta_description: AI Agent Gateway Console
           meta_publisher: Homelab
@@ -63,7 +63,7 @@ data:
         attrs:
           name: LaunchFast
           group: Development
-          meta_launch_url: https://holdens-mac-mini.story-larch.ts.net:8446
+          meta_launch_url: https://hardy-mac-mini.folk-adelie.ts.net:8446
           meta_icon: https://api.iconify.design/mdi/rocket-launch-outline.svg?color=%236c63ff
           meta_description: Modern Startup Scaffolding CLI
           meta_publisher: Homelab

@@ -39,6 +39,8 @@ spec:
               value: authentik
             - name: AUTHENTIK_POSTGRESQL__NAME
               value: authentik
+            - name: AUTHENTIK__WEB__EXTERNAL_URL
+              value: https://hardy-mac-mini.folk-adelie.ts.net
           affinity:
             podAntiAffinity: none
             nodeAffinity:
