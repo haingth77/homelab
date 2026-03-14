@@ -33,9 +33,9 @@ spec:
             runAsUser: 472
             runAsGroup: 472
             fsGroup: 472
-          envFromSecrets:
-            - name: grafana-secret
-              optional: false
+          env:
+            - name: GF_SERVER_ROOT_URL
+              value: https://hardy-mac-mini.folk-adelie.ts.net:8444
           grafana.ini:
             server:
               root_url: https://hardy-mac-mini.folk-adelie.ts.net:8444
