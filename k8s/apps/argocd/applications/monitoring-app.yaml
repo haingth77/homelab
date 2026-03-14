@@ -38,7 +38,7 @@ spec:
               value: https://hardy-mac-mini.folk-adelie.ts.net:8444
           grafana.ini:
             server:
-              root_url: https://hardy-mac-mini.folk-adelie.ts.net:8444
+              # root_url set via GF_SERVER_ROOT_URL env var
             auth:
               disable_login_form: true
             auth.generic_oauth:
