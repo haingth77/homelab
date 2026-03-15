@@ -54,6 +54,11 @@ resource "helm_release" "argocd" {
     value = "jsonPointers:\n- /metadata/finalizers\n"
   }
 
+  set {
+    name  = "gloal.hostAliases"
+    value = yamlencode([{ ip = var.authentik_oidc_host_alias_ip, hostnames = [var.tailscale_host] }])
+  }
+
   # OIDC SSO via Authentik — client secret stored in argocd-secret.
   set {
     name  = "configs.cm.url"

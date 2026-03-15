@@ -3,6 +3,12 @@ variable "tailscale_host" {
   type        = string
 }
 
+variable "authentik_oidc_host_alias_ip" {
+  description = "CLusterIP used so that tailscale_host resolves to Authentik from ArgoCD pods"
+  type        = string
+  default     = "10.96.50.100"
+}
+
 variable "argocd_oidc_client_secret" {
   description = "OIDC client secret for ArgoCD's Authentik provider"
   type        = string
