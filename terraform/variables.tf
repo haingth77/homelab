@@ -36,7 +36,7 @@ variable "argocd_version" {
 variable "homelab_repo_url" {
   description = "Git repository HTTPS URL for the homelab GitOps source"
   type        = string
-  default     = "https://github.com/holdennguyen/homelab.git"
+  default     = "https://github.com/haingth77/homelab.git"
 }
 
 # ── Infisical bootstrap secrets ───────────────────────────────────────────────

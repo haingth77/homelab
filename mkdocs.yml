@@ -1,7 +1,7 @@
 site_name: Homelab Docs
-site_url: https://holdennguyen.github.io/homelab/
-repo_url: https://github.com/holdennguyen/homelab
-repo_name: holdennguyen/homelab
+site_url: https://haingth77.github.io/homelab/
+repo_url: https://github.com/haingth77/homelab.git
+repo_name: haingth77/homelab
 
 theme:
   name: material

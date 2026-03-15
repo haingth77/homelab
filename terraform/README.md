@@ -60,7 +60,7 @@ All variables are documented in `variables.tf`. The table below provides the com
 |---|---|---|---|---|
 | `kube_context` | string | no | `"orbstack"` | kubeconfig context name |
 | `argocd_version` | string | no | `"7.8.0"` | ArgoCD Helm chart version |
-| `homelab_repo_url` | string | no | `"https://github.com/holdennguyen/homelab.git"` | HTTPS URL of the homelab git repo |
+| `homelab_repo_url` | string | no | `"https://github.com/haingth77/homelab.git"` | HTTPS URL of the homelab git repo |
 | `argocd_oidc_client_secret` | string | **yes** | — | OIDC client secret for ArgoCD's Authentik SSO provider |
 | `infisical_encryption_key` | string | **yes** | — | 32-char hex string; Infisical encrypts all stored secrets with this |
 | `infisical_auth_secret` | string | **yes** | — | Base64 string; Infisical JWT signing secret |

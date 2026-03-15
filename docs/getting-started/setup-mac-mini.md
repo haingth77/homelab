@@ -38,7 +38,7 @@ kubectl get nodes                # one node, Ready
 
 ```bash
 # Replace with your chosen path; homelab docs often assume ~/homelab
-git clone https://github.com/holdennguyen/homelab.git
+git clone https://github.com/haingth77/homelab.git
 cd homelab
 git submodule update --init
 ```

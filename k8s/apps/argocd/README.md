@@ -135,7 +135,7 @@ ArgoCD runs in **insecure mode** (`server.insecure = true`) — it serves plain 
 The homelab repository is public on GitHub. ArgoCD clones it via unauthenticated HTTPS — no deploy keys, PATs, or credentials are needed. All Application CRs use the HTTPS URL format:
 
 ```
-repoURL: https://github.com/holdennguyen/homelab.git
+repoURL: https://github.com/haingth77/homelab.git
 ```
 
 This eliminates the risk of SSH private key leakage in the public repo's Terraform state or tfvars. If the repo ever goes private, a Fine-grained PAT can be added via the Infisical → ESO pipeline.
@@ -187,7 +187,7 @@ metadata:
 spec:
   project: <project>                            # secrets | data | apps
   source:
-    repoURL: https://github.com/holdennguyen/homelab.git
+    repoURL: https://github.com/haingth77/homelab.git
     targetRevision: HEAD
     path: k8s/apps/my-service
   destination:
@@ -258,7 +258,7 @@ kubectl logs -n argocd deploy/argocd-application-controller --tail=50
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| App shows `OutOfSync` forever | ArgoCD can't clone repo | Verify the HTTPS URL is reachable: `git ls-remote https://github.com/holdennguyen/homelab.git` |
+| App shows `OutOfSync` forever | ArgoCD can't clone repo | Verify the HTTPS URL is reachable: `git ls-remote https://github.com/haingth77/homelab.git` |
 | Application stuck in `Progressing` | Pod not ready | `kubectl describe pod -n <namespace>` for Events |
 | CRD not found during sync | Wrong sync wave order | Ensure `external-secrets` (wave 0) is healthy before `external-secrets-config` (wave 1) syncs |
 | Changes not deployed after push | Normal poll delay | Wait ~3min or force refresh via annotation |

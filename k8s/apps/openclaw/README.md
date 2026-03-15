@@ -714,7 +714,7 @@ kubectl rollout restart deployment/openclaw -n openclaw
 When cloning the homelab repo on a new machine, the submodule directory will be empty by default. Initialize it with:
 
 ```bash
-git clone https://github.com/holdennguyen/homelab.git
+git clone https://github.com/haingth77/homelab.git
 cd homelab
 git submodule update --init
 ```

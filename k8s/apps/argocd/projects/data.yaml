@@ -8,7 +8,7 @@ metadata:
 spec:
   description: Databases and persistent data stores
   sourceRepos:
-    - https://github.com/holdennguyen/homelab.git
+    - https://github.com/haingth77/homelab.git
   destinations: []
   clusterResourceWhitelist:
     - group: ""

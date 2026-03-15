@@ -42,7 +42,7 @@ flowchart TD
 ## Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/holdennguyen/homelab.git
+git clone https://github.com/haingth77/homelab.git
 cd homelab
 ```
 
@@ -318,7 +318,7 @@ terraform apply
 
 | Issue | Symptom | Fix |
 |---|---|---|
-| ArgoCD fails to pull repo | `App shows OutOfSync` | Verify the HTTPS URL is reachable: `git ls-remote https://github.com/holdennguyen/homelab.git` |
+| ArgoCD fails to pull repo | `App shows OutOfSync` | Verify the HTTPS URL is reachable: `git ls-remote https://github.com/haingth77/homelab.git` |
 | Infisical CrashLoopBackOff | Pod restarts, DB migration errors in logs | PostgreSQL not ready yet — Kubernetes retries automatically. Wait ~2 minutes |
 | ESO ClusterSecretStore 401 | `InvalidProviderConfig: status-code=401` | Machine identity credentials are wrong or placeholders — re-run `terraform apply` with real values |
 | ExternalSecrets not syncing | `SecretSyncedError: ClusterSecretStore not ready` | ClusterSecretStore is still connecting — force refresh with annotate command |
