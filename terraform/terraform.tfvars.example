@@ -1,8 +1,9 @@
 # Copy this file to terraform.tfvars and fill in real values.
 # terraform.tfvars is gitignored — never commit it.
-tailscale_host = "hardy-mac-mini.folk-adelie.ts.net"
+tailscale_host     = "hardy-mac-mini.folk-adelie.ts.net"
+authentik_base_url = "https://hardy-mac-mini.folk-adelie.ts.net:8444"
 
-kube_context     = "orbstack"
+kube_context   = "orbstack"
 argocd_version   = "7.8.0"
 
 # Generate: openssl rand -hex 16

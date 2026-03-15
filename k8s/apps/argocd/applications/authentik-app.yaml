@@ -39,6 +39,7 @@ spec:
               value: authentik
             - name: AUTHENTIK_POSTGRESQL__NAME
               value: authentik
+            # Use :8444 to avoid Tailscale Serve TLS issues on default port 443.
             - name: AUTHENTIK__WEB__EXTERNAL_URL
               value: https://hardy-mac-mini.folk-adelie.ts.net:8444
           affinity:

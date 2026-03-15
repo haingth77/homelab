@@ -1,10 +1,10 @@
 variable "tailscale_host" {
-  description = "Tailscale hostname for this node (e.g. hardy-mac-mini.folk-adelie.ts.net). Used for Argo CD UI URL and OIDC issuer; must resolve to Authentik from inside the cluster (see setup-mac-mini.md in-cluster DNS)."
+  description = "Tailscale hostname for this node (e.g. hardy-mac-mini.folk-adelie.ts.net). Used for Argo CD UI URL; must resolve to Authentik from inside the cluster (hostAlias)."
   type        = string
 }
 
 variable "authentik_base_url" {
-  description = "Full base url for Authentik (SSO)"
+  description = "Full base URL for Authentik (SSO). Use :8444 if Tailscale Serve on 443 fails (e.g. https://hardy-mac-mini.folk-adelie.ts.net:8444). OIDC issuer is derived from this."
   type        = string
   default     = "https://hardy-mac-mini.folk-adelie.ts.net:8444"
 }
