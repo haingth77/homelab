@@ -144,7 +144,7 @@ This step is done once in the Infisical web UI. Infisical cannot configure itsel
 kubectl get svc -n infisical -l app.kubernetes.io/component=infisical
 ```
 
-Open `http://localhost:30445` (or via Tailscale: `https://holdens-mac-mini.story-larch.ts.net:8445` if Tailscale Serve is already configured).
+Open `http://localhost:30445` (or via Tailscale: `https://hardy-mac-mini.folk-adelie.ts.net:8445` if Tailscale Serve is already configured).
 
 ### 6b: Create Admin Account
 
@@ -244,25 +244,25 @@ tailscale serve status
 Expected output:
 
 ```
-https://holdens-mac-mini.story-larch.ts.net (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net (tailnet only)
 |-- / proxy http://localhost:30500
 
-https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8443 (tailnet only)
 |-- / proxy http://localhost:30080
 
-https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8444 (tailnet only)
 |-- / proxy http://localhost:30090
 
-https://holdens-mac-mini.story-larch.ts.net:8445 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8445 (tailnet only)
 |-- / proxy http://localhost:30445
 
-https://holdens-mac-mini.story-larch.ts.net:8446 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8446 (tailnet only)
 |-- / proxy http://localhost:30100
 
-https://holdens-mac-mini.story-larch.ts.net:8447 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8447 (tailnet only)
 |-- / proxy http://localhost:30789
 
-https://holdens-mac-mini.story-larch.ts.net:8448 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8448 (tailnet only)
 |-- / proxy http://localhost:30448
 ```
 
@@ -286,13 +286,13 @@ Access URLs after bootstrap:
 
 | Service | URL | Auth |
 |---|---|---|
-| Authentik (SSO) | `https://holdens-mac-mini.story-larch.ts.net` | akadmin / bootstrap password |
-| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | SSO via Authentik |
-| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | SSO via Authentik |
-| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | Local admin |
-| LaunchFast | `https://holdens-mac-mini.story-larch.ts.net:8446` | Bookmark via Authentik |
-| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8447` | Local |
-| Trivy Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8448` | Bookmark via Authentik |
+| Authentik (SSO) | `https://hardy-mac-mini.folk-adelie.ts.net` | akadmin / bootstrap password |
+| ArgoCD | `https://hardy-mac-mini.folk-adelie.ts.net:8443` | SSO via Authentik |
+| Grafana | `https://hardy-mac-mini.folk-adelie.ts.net:8444` | SSO via Authentik |
+| Infisical | `https://hardy-mac-mini.folk-adelie.ts.net:8445` | Local admin |
+| LaunchFast | `https://hardy-mac-mini.folk-adelie.ts.net:8446` | Bookmark via Authentik |
+| OpenClaw | `https://hardy-mac-mini.folk-adelie.ts.net:8447` | Local |
+| Trivy Dashboard | `https://hardy-mac-mini.folk-adelie.ts.net:8448` | Bookmark via Authentik |
 
 ## Re-bootstrap from Scratch
 

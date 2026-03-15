@@ -55,6 +55,7 @@ spec:
           replicas: 1
           service:
             type: NodePort
+            clusterIP: "10.96.50.100"
             nodePortHttp: 30500
             nodePortHttps: 30501
 

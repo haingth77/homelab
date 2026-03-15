@@ -222,7 +222,7 @@ resources:
 
 ## Accessing the UI
 
-ArgoCD is accessible at `https://holdens-mac-mini.story-larch.ts.net:8443` from any Tailscale device. Authentication is handled exclusively via **Authentik SSO** (OIDC) — the local admin login is disabled.
+ArgoCD is accessible at `https://hardy-mac-mini.folk-adelie.ts.net:8443` from any Tailscale device. Authentication is handled exclusively via **Authentik SSO** (OIDC) — the local admin login is disabled.
 
 **One-time Tailscale Serve setup:**
 

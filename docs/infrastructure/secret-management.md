@@ -153,7 +153,7 @@ When deploying a new service that needs secrets, follow these steps:
 
 ### Step 1: Add the secret to Infisical
 
-Open `https://holdens-mac-mini.story-larch.ts.net:8445`, navigate to the `homelab` project → `prod` environment, and add your secret (e.g., `MY_SERVICE_API_KEY`).
+Open `https://hardy-mac-mini.folk-adelie.ts.net:8445`, navigate to the `homelab` project → `prod` environment, and add your secret (e.g., `MY_SERVICE_API_KEY`).
 
 ### Step 2: Create an ExternalSecret manifest
 

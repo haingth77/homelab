@@ -145,14 +145,14 @@ sequenceDiagram
 
 | Service | Source | Namespace | Access |
 |---------|--------|-----------|--------|
-| Argo CD | Helm chart via Terraform | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443` |
-| Authentik (SSO) | Helm chart via ArgoCD | `authentik` | `https://holdens-mac-mini.story-larch.ts.net` |
-| Infisical | Helm chart via ArgoCD | `infisical` | `https://holdens-mac-mini.story-larch.ts.net:8445` |
+| Argo CD | Helm chart via Terraform | `argocd` | `https://hardy-mac-mini.folk-adelie.ts.net:8443` |
+| Authentik (SSO) | Helm chart via ArgoCD | `authentik` | `https://hardy-mac-mini.folk-adelie.ts.net` |
+| Infisical | Helm chart via ArgoCD | `infisical` | `https://hardy-mac-mini.folk-adelie.ts.net:8445` |
 | External Secrets Operator | Helm chart via ArgoCD | `external-secrets` | internal only |
-| Grafana + Prometheus | Helm chart via ArgoCD | `monitoring` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
+| Grafana + Prometheus | Helm chart via ArgoCD | `monitoring` | `https://hardy-mac-mini.folk-adelie.ts.net:8444` |
 | Trivy Operator | Helm chart via ArgoCD | `monitoring` | internal only (CRs: `kubectl get vulnerabilityreports -A`) |
-| Trivy Dashboard | Kustomize via ArgoCD | `trivy-dashboard` | `https://holdens-mac-mini.story-larch.ts.net:8448` |
-| OpenClaw | Kustomize via ArgoCD | `openclaw` | `https://holdens-mac-mini.story-larch.ts.net:8447` |
+| Trivy Dashboard | Kustomize via ArgoCD | `trivy-dashboard` | `https://hardy-mac-mini.folk-adelie.ts.net:8448` |
+| OpenClaw | Kustomize via ArgoCD | `openclaw` | `https://hardy-mac-mini.folk-adelie.ts.net:8447` |
 | Namespace Security | Kustomize via ArgoCD | `argocd` | cluster-wide Pod Security Standard labels |
 | Network Policies | Kustomize via ArgoCD | `argocd` | default-deny ingress/egress per namespace |
 
@@ -227,13 +227,13 @@ tailscale serve status
 
 Access URLs (any Tailscale device):
 
-- Authentik (SSO): `https://holdens-mac-mini.story-larch.ts.net`
-- ArgoCD: `https://holdens-mac-mini.story-larch.ts.net:8443`
-- Grafana: `https://holdens-mac-mini.story-larch.ts.net:8444`
-- Infisical: `https://holdens-mac-mini.story-larch.ts.net:8445`
-- LaunchFast: `https://holdens-mac-mini.story-larch.ts.net:8446`
-- OpenClaw: `https://holdens-mac-mini.story-larch.ts.net:8447`
-- Trivy Dashboard: `https://holdens-mac-mini.story-larch.ts.net:8448`
+- Authentik (SSO): `https://hardy-mac-mini.folk-adelie.ts.net`
+- ArgoCD: `https://hardy-mac-mini.folk-adelie.ts.net:8443`
+- Grafana: `https://hardy-mac-mini.folk-adelie.ts.net:8444`
+- Infisical: `https://hardy-mac-mini.folk-adelie.ts.net:8445`
+- LaunchFast: `https://hardy-mac-mini.folk-adelie.ts.net:8446`
+- OpenClaw: `https://hardy-mac-mini.folk-adelie.ts.net:8447`
+- Trivy Dashboard: `https://hardy-mac-mini.folk-adelie.ts.net:8448`
 
 ### Verify Deployment
 

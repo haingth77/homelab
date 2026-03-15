@@ -57,13 +57,13 @@ resource "helm_release" "argocd" {
   # OIDC SSO via Authentik — client secret stored in argocd-secret.
   set {
     name  = "configs.cm.url"
-    value = "https://holdens-mac-mini.story-larch.ts.net:8443"
+    value = "https://hardy-mac-mini.folk-adelie.ts.net:8443"
   }
   set {
     name  = "configs.cm.oidc\\.config"
     value = yamlencode({
       name      = "Authentik"
-      issuer    = "https://holdens-mac-mini.story-larch.ts.net/application/o/argocd/"
+      issuer    = "https://hardy-mac-mini.folk-adelie.ts.net/application/o/argocd/"
       clientID  = "argocd"
       clientSecret = "$oidc.argocd.clientSecret"
       requestedScopes = ["openid", "profile", "email"]

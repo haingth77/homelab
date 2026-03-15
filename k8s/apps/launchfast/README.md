@@ -105,7 +105,7 @@ The bookmark is managed via the Authentik Blueprint in `k8s/apps/authentik/bluep
 
 **Via Authentik portal (recommended):**
 
-Visit `https://holdens-mac-mini.story-larch.ts.net` and click the LaunchFast tile.
+Visit `https://hardy-mac-mini.folk-adelie.ts.net` and click the LaunchFast tile.
 
 **Via Tailscale Serve (direct):**
 
@@ -113,7 +113,7 @@ Visit `https://holdens-mac-mini.story-larch.ts.net` and click the LaunchFast til
 tailscale serve --bg --https 8446 http://localhost:30100
 ```
 
-Then visit `https://holdens-mac-mini.story-larch.ts.net:8446` from any Tailscale device.
+Then visit `https://hardy-mac-mini.folk-adelie.ts.net:8446` from any Tailscale device.
 
 **Via direct NodePort:**
 

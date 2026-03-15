@@ -234,12 +234,12 @@ Services are exposed through **Tailscale Serve**, which provides automatic TLS c
 
 | Service | NodePort | Tailscale URL | Tailscale Port | Auth |
 |---|---|---|---|---|
-| Authentik (SSO) | `:30500` | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) | SSO portal |
-| ArgoCD | `:30080` (HTTP) | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 | SSO via Authentik |
-| Grafana | `:30090` | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 | SSO via Authentik |
-| Infisical | `:30445` | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 | Local admin |
-| OpenClaw | `:30789` | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 | Local |
-| Trivy Dashboard | `:30448` | `https://holdens-mac-mini.story-larch.ts.net:8448` | 8448 | Bookmark via Authentik |
+| Authentik (SSO) | `:30500` | `https://hardy-mac-mini.folk-adelie.ts.net` | 443 (default) | SSO portal |
+| ArgoCD | `:30080` (HTTP) | `https://hardy-mac-mini.folk-adelie.ts.net:8443` | 8443 | SSO via Authentik |
+| Grafana | `:30090` | `https://hardy-mac-mini.folk-adelie.ts.net:8444` | 8444 | SSO via Authentik |
+| Infisical | `:30445` | `https://hardy-mac-mini.folk-adelie.ts.net:8445` | 8445 | Local admin |
+| OpenClaw | `:30789` | `https://hardy-mac-mini.folk-adelie.ts.net:8447` | 8447 | Local |
+| Trivy Dashboard | `:30448` | `https://hardy-mac-mini.folk-adelie.ts.net:8448` | 8448 | Bookmark via Authentik |
 
 For the full networking reference, see [docs/networking.md](../infrastructure/networking.md).
 

@@ -6,7 +6,7 @@ Authentik provides **Single Sign-On (SSO)** for the homelab via **OpenID Connect
 
 | Interface | URL | Credentials |
 |---|---|---|
-| Authentik Admin | `https://holdens-mac-mini.story-larch.ts.net` | akadmin / `AUTHENTIK_BOOTSTRAP_PASSWORD` from Infisical |
+| Authentik Admin | `https://hardy-mac-mini.folk-adelie.ts.net` | akadmin / `AUTHENTIK_BOOTSTRAP_PASSWORD` from Infisical |
 | Authentik (local) | `http://localhost:30500` | same |
 
 ## Architecture
@@ -58,8 +58,8 @@ Each service has a dedicated OIDC provider in Authentik with its own client ID a
 
 | Service | Client ID | Redirect URI | Secret location |
 |---|---|---|---|
-| Grafana | `grafana` | `https://holdens-mac-mini.story-larch.ts.net:8444/login/generic_oauth` | Infisical: `GRAFANA_OAUTH_CLIENT_SECRET` |
-| ArgoCD | `argocd` | `https://holdens-mac-mini.story-larch.ts.net:8443/auth/callback` | Terraform: `argocd_oidc_client_secret` |
+| Grafana | `grafana` | `https://hardy-mac-mini.folk-adelie.ts.net:8444/login/generic_oauth` | Infisical: `GRAFANA_OAUTH_CLIENT_SECRET` |
+| ArgoCD | `argocd` | `https://hardy-mac-mini.folk-adelie.ts.net:8443/auth/callback` | Terraform: `argocd_oidc_client_secret` |
 
 All providers use **RS256** signing (asymmetric keys). Scope mappings assigned: `openid`, `email`, `profile`.
 
@@ -108,7 +108,7 @@ All OIDC providers are created via the Authentik API using the bootstrap token. 
 | Container port | 9000 (HTTP), 9443 (HTTPS) |
 | NodePort | 30500 (HTTP), 30501 (HTTPS) |
 | Tailscale HTTPS | 443 (default) |
-| URL | `https://holdens-mac-mini.story-larch.ts.net` |
+| URL | `https://hardy-mac-mini.folk-adelie.ts.net` |
 
 One-time Tailscale Serve setup:
 
@@ -120,12 +120,12 @@ tailscale serve --bg http://localhost:30500
 
 | Application | Integration | URL |
 |---|---|---|
-| Grafana | `auth.generic_oauth` | `https://holdens-mac-mini.story-larch.ts.net:8444` |
-| ArgoCD | `oidc.config` | `https://holdens-mac-mini.story-larch.ts.net:8443` |
-| Infisical | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8445` |
-| OpenClaw | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8447` |
-| Trivy Dashboard | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8448` |
-| LaunchFast | Bookmark | `https://holdens-mac-mini.story-larch.ts.net:8446` |
+| Grafana | `auth.generic_oauth` | `https://hardy-mac-mini.folk-adelie.ts.net:8444` |
+| ArgoCD | `oidc.config` | `https://hardy-mac-mini.folk-adelie.ts.net:8443` |
+| Infisical | Bookmark | `https://hardy-mac-mini.folk-adelie.ts.net:8445` |
+| OpenClaw | Bookmark | `https://hardy-mac-mini.folk-adelie.ts.net:8447` |
+| Trivy Dashboard | Bookmark | `https://hardy-mac-mini.folk-adelie.ts.net:8448` |
+| LaunchFast | Bookmark | `https://hardy-mac-mini.folk-adelie.ts.net:8446` |
 | Homelab Docs | Bookmark | `https://holdennguyen.github.io/homelab` |
 
 ## Adding a new Bookmark Application
@@ -206,31 +206,31 @@ OIDC_SECRET=$(kubectl get secret <service-secret> -n <namespace> \
   -o jsonpath='{.data.OIDC_CLIENT_SECRET}' | base64 -d)
 
 AUTH_FLOW=$(curl -sk -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/flows/instances/?slug=default-provider-authorization-implicit-consent" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/flows/instances/?slug=default-provider-authorization-implicit-consent" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['pk'])")
 
 INVAL_FLOW=$(curl -sk -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/flows/instances/?slug=default-provider-invalidation-flow" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/flows/instances/?slug=default-provider-invalidation-flow" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['pk'])")
 
 SIGNING_KEY=$(curl -sk -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/crypto/certificatekeypairs/?name=authentik+Self-signed+Certificate" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/crypto/certificatekeypairs/?name=authentik+Self-signed+Certificate" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['pk'])")
 
 SCOPE_OPENID=$(curl -sk -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/propertymappings/provider/scope/?scope_name=openid" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/propertymappings/provider/scope/?scope_name=openid" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['pk'])")
 SCOPE_EMAIL=$(curl -sk -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/propertymappings/provider/scope/?scope_name=email" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/propertymappings/provider/scope/?scope_name=email" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['pk'])")
 SCOPE_PROFILE=$(curl -sk -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/propertymappings/provider/scope/?scope_name=profile" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/propertymappings/provider/scope/?scope_name=profile" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['pk'])")
 
 PROVIDER_PK=$(curl -sk -X POST \
   -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
   -H "Content-Type: application/json" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/providers/oauth2/" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/providers/oauth2/" \
   -d "{
     \"name\": \"<service-slug>\",
     \"authorization_flow\": \"$AUTH_FLOW\",
@@ -238,7 +238,7 @@ PROVIDER_PK=$(curl -sk -X POST \
     \"client_type\": \"confidential\",
     \"client_id\": \"<service-slug>\",
     \"client_secret\": \"$OIDC_SECRET\",
-    \"redirect_uris\": [{\"matching_mode\": \"strict\", \"url\": \"https://holdens-mac-mini.story-larch.ts.net:<port>/auth/callback\"}],
+    \"redirect_uris\": [{\"matching_mode\": \"strict\", \"url\": \"https://hardy-mac-mini.folk-adelie.ts.net:<port>/auth/callback\"}],
     \"signing_key\": \"$SIGNING_KEY\",
     \"property_mappings\": [\"$SCOPE_OPENID\", \"$SCOPE_EMAIL\", \"$SCOPE_PROFILE\"]
   }" | python3 -c "import json,sys; print(json.load(sys.stdin)['pk'])")
@@ -246,7 +246,7 @@ PROVIDER_PK=$(curl -sk -X POST \
 curl -sk -X PATCH \
   -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
   -H "Content-Type: application/json" \
-  "https://holdens-mac-mini.story-larch.ts.net/api/v3/core/applications/<service-slug>/" \
+  "https://hardy-mac-mini.folk-adelie.ts.net/api/v3/core/applications/<service-slug>/" \
   -d "{\"provider\": $PROVIDER_PK}"
 ```
 
@@ -257,14 +257,14 @@ Replace `<service-slug>`, `<service-secret>`, `<namespace>`, and `<port>` with a
 Mount the secret as a file or env var and configure the service's OIDC settings. Authentik endpoints are auto-discovered from:
 
 ```
-https://holdens-mac-mini.story-larch.ts.net/application/o/<slug>/.well-known/openid-configuration
+https://hardy-mac-mini.folk-adelie.ts.net/application/o/<slug>/.well-known/openid-configuration
 ```
 
 Standard Authentik endpoints:
-- **Authorize:** `https://holdens-mac-mini.story-larch.ts.net/application/o/authorize/`
-- **Token:** `https://holdens-mac-mini.story-larch.ts.net/application/o/token/`
-- **Userinfo:** `https://holdens-mac-mini.story-larch.ts.net/application/o/userinfo/`
-- **OIDC Discovery:** `https://holdens-mac-mini.story-larch.ts.net/application/o/<slug>/.well-known/openid-configuration`
+- **Authorize:** `https://hardy-mac-mini.folk-adelie.ts.net/application/o/authorize/`
+- **Token:** `https://hardy-mac-mini.folk-adelie.ts.net/application/o/token/`
+- **Userinfo:** `https://hardy-mac-mini.folk-adelie.ts.net/application/o/userinfo/`
+- **OIDC Discovery:** `https://hardy-mac-mini.folk-adelie.ts.net/application/o/<slug>/.well-known/openid-configuration`
 
 #### 6. Update documentation
 
@@ -280,7 +280,7 @@ Standard Authentik endpoints:
 kubectl rollout restart deployment <service> -n <namespace>
 
 # Verify OIDC discovery
-curl -sk "https://holdens-mac-mini.story-larch.ts.net/application/o/<slug>/.well-known/openid-configuration" | python3 -m json.tool
+curl -sk "https://hardy-mac-mini.folk-adelie.ts.net/application/o/<slug>/.well-known/openid-configuration" | python3 -m json.tool
 
 # Test login via the service's OIDC button
 ```

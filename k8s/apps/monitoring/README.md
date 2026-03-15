@@ -39,7 +39,7 @@ flowchart TD
 
 | Interface | URL | Auth |
 |---|---|---|
-| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | SSO via Authentik (auto-redirects) |
+| Grafana | `https://hardy-mac-mini.folk-adelie.ts.net:8444` | SSO via Authentik (auto-redirects) |
 | Grafana (local) | `http://localhost:30090` | SSO via Authentik |
 
 Grafana is configured with SSO-only access — the local login form is disabled and users are auto-redirected to Authentik. The admin password in `grafana-secret` is retained for API and break-glass access.
@@ -274,7 +274,7 @@ Update `targetRevision` in the Application CR to the desired chart version, then
 | Grafana container port | 3000 |
 | NodePort | 30090 |
 | Tailscale HTTPS | 8444 |
-| URL | `https://holdens-mac-mini.story-larch.ts.net:8444` |
+| URL | `https://hardy-mac-mini.folk-adelie.ts.net:8444` |
 
 One-time Tailscale Serve setup:
 

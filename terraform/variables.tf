@@ -1,3 +1,8 @@
+variable "tailscale_host" {
+  description = "Tailscale hostname for this node (e.g. hardy-mac-mini.folk-adelie.ts.net). Used for Argo CD UI URL and OIDC issuer; must resolve to Authentik from inside the cluster (see setup-mac-mini.md in-cluster DNS)."
+  type        = string
+}
+
 variable "argocd_oidc_client_secret" {
   description = "OIDC client secret for ArgoCD's Authentik provider"
   type        = string

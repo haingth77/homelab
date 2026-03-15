@@ -6,7 +6,7 @@ Web UI for browsing [Trivy Operator](https://github.com/aquasecurity/trivy-opera
 
 | Interface | URL |
 |---|---|
-| Tailscale | `https://holdens-mac-mini.story-larch.ts.net:8448` |
+| Tailscale | `https://hardy-mac-mini.folk-adelie.ts.net:8448` |
 | Local | `http://localhost:30448` |
 
 One-time Tailscale Serve setup:
@@ -54,7 +54,7 @@ flowchart LR
 | Container port | 8900 |
 | NodePort | 30448 |
 | Tailscale HTTPS | 8448 |
-| URL | `https://holdens-mac-mini.story-larch.ts.net:8448` |
+| URL | `https://hardy-mac-mini.folk-adelie.ts.net:8448` |
 
 ## Configuration
 

@@ -347,7 +347,7 @@ One-time Tailscale Serve setup:
 tailscale serve --bg --https 8447 http://localhost:30789
 ```
 
-Access from any Tailscale device: `https://holdens-mac-mini.story-larch.ts.net:8447`
+Access from any Tailscale device: `https://hardy-mac-mini.folk-adelie.ts.net:8447`
 
 ## Discord Chat Channel
 
@@ -509,7 +509,7 @@ This creates the bot identity that OpenClaw will use to connect to Discord.
 
 ### Step 6: Store the Token in Infisical
 
-1. Open the Infisical UI at `https://holdens-mac-mini.story-larch.ts.net:8445`
+1. Open the Infisical UI at `https://hardy-mac-mini.folk-adelie.ts.net:8445`
 2. Navigate to the **homelab** project → **prod** environment
 3. Click **Add Secret**
 4. Set the key to `DISCORD_BOT_TOKEN` and paste the bot token you copied in Step 4
@@ -631,7 +631,7 @@ OpenClaw requires a **one-time device pairing approval** for every new browser o
 
 ### What Happens
 
-1. Open the Control UI at `https://holdens-mac-mini.story-larch.ts.net:8447`
+1. Open the Control UI at `https://hardy-mac-mini.folk-adelie.ts.net:8447`
 2. Enter your `OPENCLAW_GATEWAY_TOKEN` in the settings panel and click **Connect**
 3. You see: `disconnected (1008): pairing required`
 

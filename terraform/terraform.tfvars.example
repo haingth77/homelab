@@ -1,5 +1,6 @@
 # Copy this file to terraform.tfvars and fill in real values.
 # terraform.tfvars is gitignored — never commit it.
+tailscale_host = "hardy-mac-mini.folk-adelie.ts.net"
 
 kube_context     = "orbstack"
 argocd_version   = "7.8.0"

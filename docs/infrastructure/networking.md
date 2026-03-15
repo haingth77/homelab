@@ -65,7 +65,7 @@ flowchart TD
 
 ## Request Path (Detailed)
 
-A browser request to `https://holdens-mac-mini.story-larch.ts.net` traverses five hops:
+A browser request to `https://hardy-mac-mini.folk-adelie.ts.net` traverses five hops:
 
 ```mermaid
 sequenceDiagram
@@ -76,9 +76,9 @@ sequenceDiagram
     participant NodePort as OrbStack NodePort
     participant Pod as Authentik Pod
 
-    Browser->>MagicDNS: Resolve holdens-mac-mini.story-larch.ts.net
+    Browser->>MagicDNS: Resolve hardy-mac-mini.folk-adelie.ts.net
     MagicDNS-->>Browser: 100.77.144.4
-    Browser->>WG: TLS ClientHello (SNI: holdens-mac-mini.story-larch.ts.net)
+    Browser->>WG: TLS ClientHello (SNI: hardy-mac-mini.folk-adelie.ts.net)
     WG->>TServe: Decrypted WireGuard packet to 100.77.144.4:443
     TServe->>TServe: TLS termination (Let's Encrypt cert)
     TServe->>NodePort: HTTP GET / -> http://localhost:30500
@@ -172,28 +172,28 @@ Tailscale automatically provisions and renews Let's Encrypt certificates for the
 ```bash
 $ tailscale serve status
 
-https://holdens-mac-mini.story-larch.ts.net (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net (tailnet only)
 |-- / proxy http://localhost:30500
 
-https://holdens-mac-mini.story-larch.ts.net:8443 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8443 (tailnet only)
 |-- / proxy http://localhost:30080
 
-https://holdens-mac-mini.story-larch.ts.net:8444 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8444 (tailnet only)
 |-- / proxy http://localhost:30090
 
-https://holdens-mac-mini.story-larch.ts.net:8445 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8445 (tailnet only)
 |-- / proxy http://localhost:30445
 
-https://holdens-mac-mini.story-larch.ts.net:8446 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8446 (tailnet only)
 |-- / proxy http://localhost:30100
 
-https://holdens-mac-mini.story-larch.ts.net:8447 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8447 (tailnet only)
 |-- / proxy http://localhost:30789
 
-https://holdens-mac-mini.story-larch.ts.net:8448 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8448 (tailnet only)
 |-- / proxy http://localhost:30448
 
-https://holdens-mac-mini.story-larch.ts.net:8449 (tailnet only)
+https://hardy-mac-mini.folk-adelie.ts.net:8449 (tailnet only)
 |-- / proxy http://localhost:30888
 ```
 
@@ -230,7 +230,7 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 
 | Device | Tailscale IP | DNS Name |
 |--------|-------------|----------|
-| Mac mini M4 | `100.77.144.4` | `holdens-mac-mini.story-larch.ts.net` |
+| Mac mini M4 | `100.77.144.4` | `hardy-mac-mini.folk-adelie.ts.net` |
 | iPad mini gen 5 | `100.121.193.73` | `ipad-mini-gen-5.story-larch.ts.net` |
 | iPhone 12 Pro Max | `100.67.153.52` | `iphone-12-pro-max.story-larch.ts.net` |
 
@@ -238,13 +238,13 @@ Tailscale's MagicDNS automatically resolves `<hostname>.story-larch.ts.net` to t
 
 | Service | URL | Port | Auth |
 |---------|-----|------|------|
-| Authentik (SSO) | `https://holdens-mac-mini.story-larch.ts.net` | 443 (default) | SSO portal (Homelab Homepage) |
-| ArgoCD | `https://holdens-mac-mini.story-larch.ts.net:8443` | 8443 | SSO via Authentik |
-| Grafana | `https://holdens-mac-mini.story-larch.ts.net:8444` | 8444 | SSO via Authentik |
-| Infisical | `https://holdens-mac-mini.story-larch.ts.net:8445` | 8445 | Local admin |
-| LaunchFast | `https://holdens-mac-mini.story-larch.ts.net:8446` | 8446 | SSO portal bookmark |
-| OpenClaw | `https://holdens-mac-mini.story-larch.ts.net:8447` | 8447 | SSO portal bookmark |
-| Trivy Dashboard | `https://holdens-mac-mini.story-larch.ts.net:8448` | 8448 | SSO portal bookmark |
+| Authentik (SSO) | `https://hardy-mac-mini.folk-adelie.ts.net` | 443 (default) | SSO portal (Homelab Homepage) |
+| ArgoCD | `https://hardy-mac-mini.folk-adelie.ts.net:8443` | 8443 | SSO via Authentik |
+| Grafana | `https://hardy-mac-mini.folk-adelie.ts.net:8444` | 8444 | SSO via Authentik |
+| Infisical | `https://hardy-mac-mini.folk-adelie.ts.net:8445` | 8445 | Local admin |
+| LaunchFast | `https://hardy-mac-mini.folk-adelie.ts.net:8446` | 8446 | SSO portal bookmark |
+| OpenClaw | `https://hardy-mac-mini.folk-adelie.ts.net:8447` | 8447 | SSO portal bookmark |
+| Trivy Dashboard | `https://hardy-mac-mini.folk-adelie.ts.net:8448` | 8448 | SSO portal bookmark |
 
 ### Tailscale Serve vs Funnel
 
@@ -323,7 +323,7 @@ flowchart TD
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Could not resolve host: *.story-larch.ts.net` | MagicDNS not enabled or not propagated | Enable MagicDNS in Tailscale admin; or add `100.77.144.4 holdens-mac-mini.story-larch.ts.net` to `/etc/hosts` |
+| `Could not resolve host: *.story-larch.ts.net` | MagicDNS not enabled or not propagated | Enable MagicDNS in Tailscale admin; or add `100.77.144.4 hardy-mac-mini.folk-adelie.ts.net` to `/etc/hosts` |
 | `connection refused` on NodePort | Pod not running or Service not NodePort | `kubectl get svc,pods -n <namespace>` |
 | `Serve is not enabled on your tailnet` | Tailscale Serve feature not activated | Visit the URL shown in the error to enable it |
 | TLS certificate error in browser | `tailscale serve` not running | `tailscale serve status`; restart with `--bg` commands |

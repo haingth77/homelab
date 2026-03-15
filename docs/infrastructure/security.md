@@ -321,7 +321,7 @@ Missing controls are tracked in the [Hardening Roadmap](#hardening-roadmap).
 |---|---|---|
 | Container | 18789 | Pod-internal |
 | NodePort | 30789 | `localhost` only (OrbStack) |
-| Tailscale Serve | 8447 | `https://holdens-mac-mini.story-larch.ts.net:8447` (tailnet only) |
+| Tailscale Serve | 8447 | `https://hardy-mac-mini.folk-adelie.ts.net:8447` (tailnet only) |
 
 **Authentication layers:**
 

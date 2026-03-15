@@ -200,7 +200,7 @@ The homelab runs kube-prometheus-stack (Prometheus + Grafana + Alertmanager) in 
 
 ```bash
 # Access Grafana
-# https://holdens-mac-mini.story-larch.ts.net:8444
+# https://hardy-mac-mini.folk-adelie.ts.net:8444
 
 # Check Prometheus targets
 kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090 &

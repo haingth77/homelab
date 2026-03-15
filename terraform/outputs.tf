@@ -1,6 +1,6 @@
 output "argocd_url_tailscale" {
   description = "ArgoCD UI via Tailscale Serve (configure with: tailscale serve --bg --https 8443 http://localhost:30080)"
-  value       = "https://holdens-mac-mini.story-larch.ts.net:8443"
+  value       = "https://hardy-mac-mini.folk-adelie.ts.net:8443"
 }
 
 output "argocd_nodeport_http" {
@@ -15,7 +15,7 @@ output "argocd_admin_password_command" {
 
 output "infisical_url_tailscale" {
   description = "Infisical UI via Tailscale Serve (configure with: tailscale serve --bg --https 8445 http://localhost:30445)"
-  value       = "https://holdens-mac-mini.story-larch.ts.net:8445"
+  value       = "https://hardy-mac-mini.folk-adelie.ts.net:8445"
 }
 
 output "next_steps" {

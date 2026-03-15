@@ -156,7 +156,7 @@ This is done once after `terraform apply` deploys Infisical.
 
 ```mermaid
 flowchart TD
-    A["1. Open https://holdens-mac-mini.story-larch.ts.net:8445"] --> B
+    A["1. Open https://hardy-mac-mini.folk-adelie.ts.net:8445"] --> B
     B["2. Create admin account\n(signup form on first visit)"] --> C
     C["3. Create project named 'homelab'\nverify slug = 'homelab'"] --> D
     D["4. Add all secrets in homelab/prod/\n(see inventory table)"] --> E
@@ -170,7 +170,7 @@ flowchart TD
 
 ### Step 1 — First Login
 
-Open `https://holdens-mac-mini.story-larch.ts.net:8445`. On first visit, Infisical shows a registration screen. Create an admin account. This is the superadmin of the Infisical instance.
+Open `https://hardy-mac-mini.folk-adelie.ts.net:8445`. On first visit, Infisical shows a registration screen. Create an admin account. This is the superadmin of the Infisical instance.
 
 ### Step 2 — Create the `homelab` Project
 
@@ -213,7 +213,7 @@ Terraform updates only the `infisical-machine-identity` K8s Secret. ESO picks it
 
 | Method | URL | Notes |
 |---|---|---|
-| Tailscale (any device) | `https://holdens-mac-mini.story-larch.ts.net:8445` | Requires Tailscale |
+| Tailscale (any device) | `https://hardy-mac-mini.folk-adelie.ts.net:8445` | Requires Tailscale |
 | Local (Mac mini only) | `http://localhost:30445` | Direct NodePort access |
 
 If Tailscale Serve is not yet configured:
@@ -254,7 +254,7 @@ flowchart LR
 | Container port | `:8080` |
 | Kubernetes NodePort | `:30445` |
 | Tailscale Serve upstream | `http://localhost:30445` |
-| Tailscale URL | `https://holdens-mac-mini.story-larch.ts.net:8445` |
+| Tailscale URL | `https://hardy-mac-mini.folk-adelie.ts.net:8445` |
 | Internal cluster DNS | `infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080` |
 
 The internal DNS name is what the `ClusterSecretStore` uses to reach Infisical — no external network hop, no Tailscale, no NodePort.
