@@ -1,0 +1,26 @@
+# Extra Service so in-cluster clients (e.g. Argo CD) can reach Authentik OIDC on port 8444.
+# The main Authentik server Service (from Helm) only exposes 80/443; this Service exposes 8444
+# targeting the same server pods (container port 9443). Set Terraform variable
+# authentik_oidc_host_alias_ip to this ClusterIP so hostAlias resolves to it.
+# For 10.96.x clusters, change clusterIP and Terraform to 10.96.50.101.
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-server-oidc
+  namespace: authentik
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/instance: authentik
+    app.kubernetes.io/component: server-oidc
+spec:
+  type: ClusterIP
+  clusterIP: "10.43.50.101"
+  ports:
+    - name: https-alt
+      port: 8444
+      targetPort: 9443
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/instance: authentik
+    app.kubernetes.io/component: server

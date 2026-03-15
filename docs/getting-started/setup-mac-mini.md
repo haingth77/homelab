@@ -248,16 +248,13 @@ In Authentik Admin, set the Argo CD provider **Redirect URI** to `https://hardy-
 
 If you see **"Failed to query provider ... Get \"https://hardy-mac-mini.folk-adelie.ts.net/application/o/argocd/.well-known/openid-configuration\": EOF"** when logging into Argo CD with Authentik, the **Argo CD server pod** (inside the cluster) cannot reach that URL because the Tailscale hostname does not resolve to Authentik from inside the cluster.
 
-**Fix (recommended): hostAlias + fixed ClusterIP** — no CoreDNS needed. The repo is already set up for this:
+**Fix (recommended): hostAlias + OIDC Service (port 8444)** — no CoreDNS needed. The repo is already set up for this:
 
-1. **Authentik** uses a fixed ClusterIP `10.96.50.100` for its server service (`k8s/apps/argocd/applications/authentik-app.yaml`).
-2. **Terraform** adds a `hostAlias` to all Argo CD pods so that `hardy-mac-mini.folk-adelie.ts.net` resolves to that IP (`terraform` variable `authentik_oidc_host_alias_ip`, default `10.96.50.100`).
+1. **OIDC Service** (`k8s/apps/authentik/oidc-service.yaml`) exposes port **8444** so in-cluster clients can reach Authentik OIDC. It uses ClusterIP `10.43.50.101` (OrbStack/K3s). For 10.96.x clusters, change that file's `clusterIP` to `10.96.50.101` and set the variable below to match.
+2. **Terraform** adds a `hostAlias` so that `hardy-mac-mini.folk-adelie.ts.net` resolves to that IP (`authentik_oidc_host_alias_ip`, default `10.43.50.101`).
 
-**If your cluster’s service CIDR is not 10.96.x.x** (e.g. OrbStack/K3s often use **10.43.x.x**), do this once:
 
-- In `terraform/terraform.tfvars`: set `authentik_oidc_host_alias_ip = "10.43.50.100"` (or another free IP in your range).
-- In `k8s/apps/argocd/applications/authentik-app.yaml`: set `server.service.clusterIP` to the same value (`"10.43.50.100"`).
-- Commit the YAML change, push to `main`, then on the Mac mini: `cd terraform && terraform apply`.
+**If you see "dial tcp …:8444: i/o timeout"**: ensure the OIDC Service exists and Terraform points to it. Sync the `authentik-config` app (it deploys `oidc-service.yaml`), then set in `terraform/terraform.tfvars`: `authentik_oidc_host_alias_ip = "10.43.50.101"` (or `10.96.50.101` for 10.96.x), run `terraform apply`, and restart Argo CD server.
 
 **Apply and restart:**
 
@@ -327,27 +324,14 @@ kubectl get pods -n argocd -o name | grep argocd-server | head -1 | xargs -I {} 
 
 Kỳ vọng: có 1 entry với `ip` = IP bạn dùng và `hostnames` chứa `hardy-mac-mini.folk-adelie.ts.net`. Nếu không thấy gì: chạy lại `terraform apply`, rồi `kubectl rollout restart deployment argocd-server -n argocd` và đợi pod mới Ready, kiểm tra lại.
 
-### 3. Service Authentik có đúng ClusterIP không?
+### 3. OIDC Service (port 8444) có đúng ClusterIP không?
 
 ```bash
+kubectl get svc -n authentik authentik-server-oidc -o wide
 kubectl get svc -n authentik -l app.kubernetes.io/component=server -o wide
 ```
 
-Xem cột **CLUSTER-IP**. Nó phải trùng với `authentik_oidc_host_alias_ip` trong tfvars (vd. `10.96.50.100` hoặc `10.43.50.100`). Nếu khác (vd. `10.43.123.45`):
-
-- **ClusterIP không đổi được** trên Service đã tạo. Cần xóa Service để Argo CD tạo lại với `clusterIP` trong manifest:
-
-```bash
-# Lưu tên service (thường là authentik-server)
-kubectl get svc -n authentik -l app.kubernetes.io/component=server
-# Xóa service (Argo CD sẽ tạo lại khi sync)
-kubectl delete svc -n authentik -l app.kubernetes.io/component=server
-# Đợi Argo CD sync (vài chục giây) hoặc Hard Refresh app authentik trong UI
-kubectl get svc -n authentik -l app.kubernetes.io/component=server
-# CLUSTER-IP phải là 10.96.50.100 (hoặc 10.43.50.100 nếu bạn dùng)
-```
-
-Sau đó cập nhật **Terraform** cho khớp: nếu cluster của bạn chỉ có dải 10.43.x.x thì trong `terraform.tfvars` đặt `authentik_oidc_host_alias_ip = "10.43.50.100"`, trong `k8s/apps/argocd/applications/authentik-app.yaml` đặt `clusterIP: "10.43.50.100"`, push rồi sync Argo CD, rồi xóa Service Authentik như trên để tạo lại với IP mới.
+`authentik-server-oidc` phải có **CLUSTER-IP** trùng với `authentik_oidc_host_alias_ip` trong tfvars (vd. `10.43.50.101` cho OrbStack/K3s, `10.96.50.101` cho 10.96.x). Nếu thiếu Service này, sync app **authentik-config** (nó deploy `oidc-service.yaml`). Nếu CLUSTER-IP của `authentik-server-oidc` khác với tfvars: sửa `k8s/apps/authentik/oidc-service.yaml` (field `clusterIP`) cho đúng dải của cluster (vd. `10.43.50.101` hoặc `10.96.50.101`), push, sync authentik-config, rồi trong `terraform.tfvars` đặt `authentik_oidc_host_alias_ip` trùng với ClusterIP đó, chạy `terraform apply` và restart Argo CD server.
 
 ### 4. Từ trong cluster có gọi được OIDC discovery không?
 
@@ -361,11 +345,7 @@ Kỳ vọng: HTTP/1.1 200 hoặc 301. Nếu `Connection refused` hoặc timeout:
 
 ### 5. Dải IP dịch vụ (service CIDR) của cluster
 
-Nếu bước 3 luôn cho ClusterIP khác 10.96.50.100 (vd. 10.43.x.x):
-
-- Trong `terraform/terraform.tfvars`: đặt `authentik_oidc_host_alias_ip = "10.43.50.100"` (hoặc IP trống trong dải của cluster).
-- Trong `k8s/apps/argocd/applications/authentik-app.yaml`: đặt `clusterIP: "10.43.50.100"` (cùng giá trị).
-- Push, sync Argo CD, rồi **xóa Service Authentik** (bước 3) để tạo lại với ClusterIP mới. Sau đó `terraform apply` và restart Argo CD server.
+Nếu cluster dùng 10.96.x.x thay vì 10.43.x.x: trong `k8s/apps/authentik/oidc-service.yaml` đặt `clusterIP: "10.96.50.101"`, trong `terraform.tfvars` đặt `authentik_oidc_host_alias_ip = "10.96.50.101"`, push, sync authentik-config, rồi `terraform apply` và restart Argo CD server.
 
 ### 6. Authentik: OIDC provider và redirect URI
 

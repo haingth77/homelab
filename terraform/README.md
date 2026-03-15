@@ -169,3 +169,35 @@ cd ~/homelab/terraform && terraform init
 ```
 
 There is no remote state backend configured. For a single-person homelab, local state is sufficient.
+
+## Troubleshooting
+
+### `terraform apply` fails on `helm_release.argocd` (cannot patch Deployment)
+
+If `helm list -n argocd` shows `STATUS: failed` and `helm status argocd -n argocd` shows:
+
+```text
+Upgrade "argocd" failed: cannot patch "argocd-applicationset-controller" with kind Deployment: "" is invalid: patch: Invalid value: ...
+```
+
+this is usually a Helm/Kubernetes patch conflict (e.g. managedFields or read-only fields). Fix by letting Helm recreate the Deployment:
+
+1. **Delete the failing Deployment** (Helm will recreate it on next apply):
+
+   ```bash
+   kubectl delete deployment argocd-applicationset-controller -n argocd
+   ```
+
+2. Re-run from repo root:
+
+   ```bash
+   cd ~/homelab/terraform && terraform apply
+   ```
+
+If the release stays in `failed` and apply still errors, reset the release and re-apply:
+
+```bash
+helm uninstall argocd -n argocd
+cd ~/homelab/terraform && terraform state rm 'helm_release.argocd'
+terraform apply
+```

@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - external-secret.yaml
   - blueprints-configmap.yaml
+  - oidc-service.yaml
