@@ -3,6 +3,12 @@ variable "tailscale_host" {
   type        = string
 }
 
+variable "authentik_base_url" {
+  description = "Full base url for Authentik (SSO)"
+  type        = string
+  default     = "https://hardy-mac-mini.folk-adelie.ts.net:8444"
+}
+
 variable "authentik_oidc_host_alias_ip" {
   description = "CLusterIP used so that tailscale_host resolves to Authentik from ArgoCD pods"
   type        = string

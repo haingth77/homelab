@@ -55,7 +55,7 @@ resource "helm_release" "argocd" {
   }
 
   set {
-    name  = "gloal.hostAliases"
+    name  = "global.hostAliases"
     value = yamlencode([{ ip = var.authentik_oidc_host_alias_ip, hostnames = [var.tailscale_host] }])
   }
 
