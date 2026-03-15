@@ -10,7 +10,7 @@ variable "authentik_base_url" {
 }
 
 variable "authentik_oidc_host_alias_ip" {
-  description = "ClusterIP that tailscale_host resolves to for OIDC (Argo CD pods). Must match the OIDC Service (k8s/apps/authentik/oidc-service.yaml): 10.43.50.101 for OrbStack/K3s, 10.96.50.101 for 10.96.x."
+  description = "ClusterIP that tailscale_host resolves to for OIDC (Argo CD pods). Must match the OIDC Service (k8s/apps/authentik/oidc-service.yaml): 10.43.50.101 for OrbStack/K3s, 10.96.50.101 for 10.96.x, 192.168.194.101 for 192.168.194.x."
   type        = string
   default     = "10.43.50.101"
 }

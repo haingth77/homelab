@@ -253,6 +253,8 @@ If you see **"Failed to query provider ... Get \"https://hardy-mac-mini.folk-ade
 1. **OIDC Service** (`k8s/apps/authentik/oidc-service.yaml`) exposes port **8444** so in-cluster clients can reach Authentik OIDC. It uses ClusterIP `10.43.50.101` (OrbStack/K3s). For 10.96.x clusters, change that file's `clusterIP` to `10.96.50.101` and set the variable below to match.
 2. **Terraform** adds a `hostAlias` so that `hardy-mac-mini.folk-adelie.ts.net` resolves to that IP (`authentik_oidc_host_alias_ip`, default `10.43.50.101`).
 
+**Cách biết cluster dùng dải IP nào:** Chạy `kubectl get svc -A | head -20` và xem cột **CLUSTER-IP**. Chọn IP trong cùng dải, ví dụ: `10.43.x.x` → `10.43.50.101`; `10.96.x.x` → `10.96.50.101`; **`192.168.194.x`** → sửa `oidc-service.yaml` thành `clusterIP: "192.168.194.101"` và trong tfvars đặt `authentik_oidc_host_alias_ip = "192.168.194.101"`.
+
 
 **If you see "dial tcp …:8444: i/o timeout"**: ensure the OIDC Service exists and Terraform points to it. Sync the `authentik-config` app (it deploys `oidc-service.yaml`), then set in `terraform/terraform.tfvars`: `authentik_oidc_host_alias_ip = "10.43.50.101"` (or `10.96.50.101` for 10.96.x), run `terraform apply`, and restart Argo CD server.
 

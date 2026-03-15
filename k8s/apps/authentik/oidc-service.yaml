@@ -2,7 +2,7 @@
 # The main Authentik server Service (from Helm) only exposes 80/443; this Service exposes 8444
 # targeting the same server pods (container port 9443). Set Terraform variable
 # authentik_oidc_host_alias_ip to this ClusterIP so hostAlias resolves to it.
-# For 10.96.x clusters, change clusterIP and Terraform to 10.96.50.101.
+# For 10.96.x: clusterIP "10.96.50.101". For 192.168.194.x: use "192.168.194.101" (and set authentik_oidc_host_alias_ip in tfvars to match).
 apiVersion: v1
 kind: Service
 metadata:
