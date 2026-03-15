@@ -83,6 +83,11 @@ resource "helm_release" "argocd" {
       requestedScopes = ["openid", "profile", "email"]
     })
   }
+  # Skip TLS verify when Argo CD (in-cluster) calls OIDC discovery; Authentik may present a cert that doesn't match the hostname.
+  set {
+    name  = "configs.cm.oidc\\.tls\\.insecure\\.skip\\.verify"
+    value = "true"
+  }
   set_sensitive {
     name  = "configs.secret.extra.oidc\\.argocd\\.clientSecret"
     value = var.argocd_oidc_client_secret

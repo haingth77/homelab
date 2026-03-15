@@ -171,9 +171,9 @@ spec:
             name: openclaw-config
         - name: workspace-src
           hostPath:
-            path: /Users/holden.nguyen/homelab/agents/workspaces
+            path: /Users/nguyenhai/Documents/HomeLab/homelab/agents/workspaces
             type: Directory
         - name: openclaw-skills
           hostPath:
-            path: /Users/holden.nguyen/homelab/skills
+            path: /Users/nguyenhai/Documents/HomeLab/homelab/skills
             type: Directory
