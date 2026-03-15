@@ -14,7 +14,6 @@ metadata:
     app.kubernetes.io/component: server-oidc
 spec:
   type: ClusterIP
-  clusterIP: "192.168.194.101"
   ports:
     - name: https-alt
       port: 8444
